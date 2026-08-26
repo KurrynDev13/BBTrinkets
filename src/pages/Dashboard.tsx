@@ -2,7 +2,7 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import type { Profile, Product, Order } from '../types';
-import { Package, Plus, LogOut, Tag, User, Edit2, Check, X } from 'lucide-react';
+import { Package, Plus, LogOut, Tag, User, Edit2, Check, X, ShoppingBag, Receipt, RefreshCw } from 'lucide-react';
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -134,8 +134,16 @@ export default function Dashboard() {
   };
 
   const fetchBuyerData = async (userId: string) => {
-    const { data: ords } = await supabase.from('orders').select('*').eq('buyer_id', userId);
-    if (ords) setOrders(ords);
+    try {
+      const { data: ords } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('buyer_id', userId)
+        .order('created_at', { ascending: false });
+      if (ords) setOrders(ords);
+    } catch (e) {
+      console.error('Error fetching orders:', e);
+    }
   };
 
   const handleAddProduct = async (e: FormEvent) => {
@@ -316,44 +324,83 @@ export default function Dashboard() {
         </div>
       ) : (
         <div className="space-y-8">
-          <h2 className="text-2xl font-serif font-bold text-bb-navy mb-6">My Purchase History</h2>
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-serif font-bold text-bb-navy flex items-center gap-2">
+              <ShoppingBag className="text-bb-teal" size={24} /> My Purchase History
+            </h2>
+            {profile && (
+              <button
+                onClick={() => fetchBuyerData(profile.id)}
+                className="text-xs text-bb-navy/70 hover:text-bb-teal bg-bb-cream hover:bg-bb-teal/10 px-3.5 py-1.5 rounded-full font-medium transition-colors flex items-center gap-1.5"
+              >
+                <RefreshCw size={12} /> Refresh History
+              </button>
+            )}
+          </div>
+
           {orders.length === 0 ? (
-            <div className="bg-white rounded-3xl p-12 border border-bb-navy/5 text-center">
-              <p className="text-bb-navy/50 text-lg mb-4">You haven't bought anything yet.</p>
-              <button onClick={() => navigate('/store')} className="text-bb-teal font-bold hover:underline">
-                Start Shopping
+            <div className="bg-white rounded-3xl p-12 border border-bb-navy/5 text-center shadow-sm">
+              <div className="w-16 h-16 bg-bb-cream rounded-full flex items-center justify-center mx-auto mb-4 text-bb-navy/40">
+                <Receipt size={28} />
+              </div>
+              <p className="text-bb-navy/60 text-lg mb-2 font-serif font-medium">No purchase records found yet.</p>
+              <p className="text-bb-navy/40 text-xs mb-6 max-w-sm mx-auto">
+                Orders made while logged in to your account will automatically show up here.
+              </p>
+              <button onClick={() => navigate('/store')} className="bg-bb-navy text-white px-6 py-2.5 rounded-full text-xs font-bold hover:bg-bb-dark transition-colors">
+                Explore Store
               </button>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-bb-navy/5 overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-bb-cream border-b border-bb-navy/5 text-bb-navy">
-                    <th className="p-4 font-semibold">Order ID</th>
-                    <th className="p-4 font-semibold">Date</th>
-                    <th className="p-4 font-semibold">Status</th>
-                    <th className="p-4 font-semibold">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map(o => (
-                    <tr key={o.id} className="border-b border-bb-navy/5 last:border-0 hover:bg-bb-cream/30">
-                      <td className="p-4 text-sm font-mono text-bb-navy/60">{o.id.substring(0,8)}...</td>
-                      <td className="p-4 text-sm text-bb-navy/80">{new Date(o.created_at).toLocaleDateString()}</td>
-                      <td className="p-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                          o.status === 'completed' ? 'bg-green-100 text-green-700' :
-                          o.status === 'paid' ? 'bg-bb-teal/20 text-bb-teal' :
-                          'bg-yellow-100 text-yellow-700'
-                        }`}>
-                          {o.status.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="p-4 font-medium text-bb-navy">₱{o.total_amount.toFixed(2)}</td>
+            <div className="bg-white rounded-2xl border border-bb-navy/5 overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-bb-cream/70 border-b border-bb-navy/5 text-bb-navy text-xs uppercase tracking-wider">
+                      <th className="p-4 font-semibold">Order Reference</th>
+                      <th className="p-4 font-semibold">Date & Time</th>
+                      <th className="p-4 font-semibold">Payment Status</th>
+                      <th className="p-4 font-semibold text-right">Amount Paid</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {orders.map(o => (
+                      <tr key={o.id} className="border-b border-bb-navy/5 last:border-0 hover:bg-bb-cream/30 transition-colors">
+                        <td className="p-4 text-sm font-mono text-bb-navy">
+                          <div className="font-bold text-xs">{o.id.substring(0,8)}...</div>
+                          {o.paymongo_checkout_id && (
+                            <div className="text-[10px] text-bb-navy/40 truncate max-w-[140px]" title={o.paymongo_checkout_id}>
+                              PM: {o.paymongo_checkout_id}
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-4 text-xs text-bb-navy/80">
+                          {new Date(o.created_at).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1 ${
+                            o.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                            o.status === 'paid' ? 'bg-teal-50 text-teal-700 border border-teal-200' :
+                            'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                            {o.status.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="p-4 font-serif font-bold text-sm text-bb-navy text-right">
+                          ₱{o.total_amount.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
