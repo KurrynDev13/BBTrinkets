@@ -1,0 +1,6 @@
+{
+  "name": "B&B Trinkets",
+  "description": "E-commerce store for art pins, keychains, artworks, and prints with seller and buyer dashboards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
