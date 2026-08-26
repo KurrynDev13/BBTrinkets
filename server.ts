@@ -17,11 +17,15 @@ async function startServer() {
   // Paymongo: Create a Checkout Link
   app.post('/api/paymongo/checkout', async (req, res) => {
     try {
-      const { amount, description, remarks } = req.body;
+      const { amount, description, remarks } = req.body || {};
       const secretKey = process.env.PAYMONGO_SECRET_KEY;
 
       if (!secretKey) {
-        return res.status(500).json({ error: 'PAYMONGO_SECRET_KEY is not configured on the server.' });
+        return res.status(400).json({ error: 'PAYMONGO_SECRET_KEY is not configured on the server. Please add it to your environment variables.' });
+      }
+
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ error: 'A valid amount is required.' });
       }
 
       const response = await fetch('https://api.paymongo.com/v1/links', {
@@ -34,7 +38,7 @@ async function startServer() {
         body: JSON.stringify({
           data: {
             attributes: {
-              amount: amount * 100, // Paymongo accepts amounts in cents
+              amount: Math.round(Number(amount) * 100), // Paymongo accepts amounts in cents
               description: description || 'B&B Trinkets Purchase',
               remarks: remarks || ''
             }
@@ -44,13 +48,16 @@ async function startServer() {
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.errors?.[0]?.detail || 'Failed to create Paymongo link');
+        return res.status(response.status).json({
+          error: data.errors?.[0]?.detail || 'Failed to create Paymongo link',
+          details: data
+        });
       }
 
       res.json(data);
     } catch (error: any) {
       console.error('Paymongo checkout error:', error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error.message || 'Payment link creation failed' });
     }
   });
 

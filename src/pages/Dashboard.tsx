@@ -2,7 +2,7 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import type { Profile, Product, Order } from '../types';
-import { Package, Plus, LogOut, Tag, User } from 'lucide-react';
+import { Package, Plus, LogOut, Tag, User, Edit2, Check, X } from 'lucide-react';
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -10,6 +10,12 @@ export default function Dashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // Profile Edit State
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editFullName, setEditFullName] = useState('');
+  const [editGcash, setEditGcash] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
   // New Product Form State
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -85,6 +91,41 @@ export default function Dashboard() {
     navigate('/auth');
   };
 
+  const handleStartEditProfile = () => {
+    if (!profile) return;
+    setEditFullName(profile.full_name || '');
+    setEditGcash(profile.gcash_number || '');
+    setIsEditingProfile(true);
+  };
+
+  const handleSaveProfile = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!profile) return;
+    setIsSavingProfile(true);
+    try {
+      const { data: updated, error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: profile.id,
+          role: profile.role,
+          full_name: editFullName.trim() || profile.full_name,
+          gcash_number: editGcash.trim()
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      if (updated) {
+        setProfile(updated);
+      }
+      setIsEditingProfile(false);
+    } catch (err: any) {
+      alert(`Error updating profile: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   const fetchSellerData = async (userId: string) => {
     const { data: prods } = await supabase.from('products').select('*').eq('seller_id', userId);
     if (prods) setProducts(prods);
@@ -125,24 +166,79 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="bg-white rounded-3xl p-8 mb-8 shadow-sm border border-bb-navy/5 flex flex-col md:flex-row justify-between items-center gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 bg-bb-teal/10 rounded-full flex items-center justify-center text-bb-teal">
-            <User size={32} />
+      <div className="bg-white rounded-3xl p-8 mb-8 shadow-sm border border-bb-navy/5">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 bg-bb-teal/10 rounded-full flex items-center justify-center text-bb-teal shrink-0">
+              <User size={32} />
+            </div>
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-serif font-bold text-bb-navy">Hello, {profile.full_name || 'User'}</h1>
+                {!isEditingProfile && (
+                  <button
+                    onClick={handleStartEditProfile}
+                    className="text-xs flex items-center gap-1 text-bb-teal hover:text-bb-navy bg-bb-teal/10 hover:bg-bb-teal/20 px-3 py-1 rounded-full font-medium transition-colors"
+                  >
+                    <Edit2 size={12} /> Edit Profile
+                  </button>
+                )}
+              </div>
+              <p className="text-bb-navy/60 capitalize flex items-center gap-2 mt-1">
+                <Tag size={14} /> {profile.role} Account • GCash: <span className="font-semibold text-bb-navy">{profile.gcash_number || 'Not provided'}</span>
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-serif font-bold text-bb-navy">Hello, {profile.full_name || 'User'}</h1>
-            <p className="text-bb-navy/60 capitalize flex items-center gap-2">
-              <Tag size={14} /> {profile.role} Account • GCash: {profile.gcash_number || 'Not provided'}
-            </p>
-          </div>
+          <button
+            onClick={handleSignOut}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-bb-navy/20 text-bb-navy hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors font-medium text-sm self-end md:self-auto"
+          >
+            <LogOut size={16} /> Sign Out
+          </button>
         </div>
-        <button
-          onClick={handleSignOut}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-bb-navy/20 text-bb-navy hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors font-medium text-sm"
-        >
-          <LogOut size={16} /> Sign Out
-        </button>
+
+        {isEditingProfile && (
+          <form onSubmit={handleSaveProfile} className="mt-6 pt-6 border-t border-bb-navy/10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end bg-bb-cream/30 p-5 rounded-2xl">
+            <div>
+              <label className="block text-xs font-semibold text-bb-navy/70 uppercase tracking-wider mb-1">Full Name</label>
+              <input
+                type="text"
+                value={editFullName}
+                onChange={(e) => setEditFullName(e.target.value)}
+                required
+                className="w-full px-4 py-2 rounded-xl border border-bb-navy/20 focus:outline-none focus:border-bb-teal text-sm bg-white"
+                placeholder="Your full name"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-bb-navy/70 uppercase tracking-wider mb-1">GCash Number</label>
+              <input
+                type="text"
+                value={editGcash}
+                onChange={(e) => setEditGcash(e.target.value)}
+                required
+                className="w-full px-4 py-2 rounded-xl border border-bb-navy/20 focus:outline-none focus:border-bb-teal text-sm bg-white"
+                placeholder="e.g. 09454008348"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={isSavingProfile}
+                className="flex-1 bg-bb-teal text-white py-2 px-4 rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                <Check size={16} /> {isSavingProfile ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsEditingProfile(false)}
+                className="px-4 py-2 rounded-xl text-sm border border-bb-navy/20 text-bb-navy hover:bg-gray-100 transition-colors flex items-center justify-center gap-1"
+              >
+                <X size={16} /> Cancel
+              </button>
+            </div>
+          </form>
+        )}
       </div>
 
       {profile.role === 'seller' ? (

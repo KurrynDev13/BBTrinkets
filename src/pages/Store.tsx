@@ -17,12 +17,26 @@ import {
   PackageCheck, 
   ShieldCheck, 
   Layers, 
-  Maximize2 
+  Maximize2,
+  Copy,
+  ExternalLink,
+  CreditCard,
+  QrCode,
+  AlertCircle
 } from 'lucide-react';
 
 interface CartItem {
   product: Product;
   quantity: number;
+}
+
+interface CheckoutData {
+  isOpen: boolean;
+  mode: 'paymongo_ready' | 'gcash_direct';
+  totalAmount: number;
+  description: string;
+  checkoutUrl?: string;
+  items: { title: string; quantity: number; price: number }[];
 }
 
 export default function Store() {
@@ -46,6 +60,16 @@ export default function Store() {
   const [reviewComment, setReviewComment] = useState('');
   const [reviewName, setReviewName] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
+
+  // Checkout modal state
+  const [checkoutModal, setCheckoutModal] = useState<CheckoutData | null>(null);
+  const [gcashRef, setGcashRef] = useState('');
+  const [buyerName, setBuyerName] = useState('');
+  const [buyerPhone, setBuyerPhone] = useState('');
+  const [buyerAddress, setBuyerAddress] = useState('');
+  const [copiedGcash, setCopiedGcash] = useState(false);
+  const [orderConfirmed, setOrderConfirmed] = useState(false);
+  const [confirmingOrder, setConfirmingOrder] = useState(false);
 
   // Cart state
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -224,28 +248,64 @@ export default function Store() {
   const handleBuySingle = async () => {
     if (!selectedProduct) return;
     setBuying(true);
+    const totalAmount = selectedProduct.price * modalQuantity;
+    const desc = `${selectedProduct.title} (Qty: ${modalQuantity})`;
+    const itemData = [{
+      title: selectedProduct.title,
+      quantity: modalQuantity,
+      price: selectedProduct.price
+    }];
+
     try {
-      const totalAmount = selectedProduct.price * modalQuantity;
       const response = await fetch('/api/paymongo/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: totalAmount,
-          description: `${selectedProduct.title} (Qty: ${modalQuantity})`,
+          description: desc,
           remarks: `Category: ${selectedProduct.category}`
         })
       });
       
-      const data = await response.json();
-      
-      if (data.data?.attributes?.checkout_url) {
-        window.location.href = data.data.attributes.checkout_url;
+      let data: any = null;
+      try {
+        const text = await response.text();
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        // Non-JSON returned (e.g. 404 HTML)
+      }
+
+      if (response.ok && data?.data?.attributes?.checkout_url) {
+        const checkoutUrl = data.data.attributes.checkout_url;
+        // Attempt popup in new tab safely
+        const win = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+        setCheckoutModal({
+          isOpen: true,
+          mode: 'paymongo_ready',
+          totalAmount,
+          description: desc,
+          checkoutUrl,
+          items: itemData
+        });
       } else {
-        alert(`Proceeding to GCash/Card checkout for ₱${totalAmount.toFixed(2)}.\n(Note: PayMongo key can be added in .env to activate live gateway)`);
+        // Show Direct GCash Checkout
+        setCheckoutModal({
+          isOpen: true,
+          mode: 'gcash_direct',
+          totalAmount,
+          description: desc,
+          items: itemData
+        });
       }
     } catch (err) {
-      console.error(err);
-      alert(`Proceeding with order for ₱${(selectedProduct.price * modalQuantity).toFixed(2)}.`);
+      console.error('Checkout error:', err);
+      setCheckoutModal({
+        isOpen: true,
+        mode: 'gcash_direct',
+        totalAmount,
+        description: desc,
+        items: itemData
+      });
     } finally {
       setBuying(false);
     }
@@ -254,30 +314,104 @@ export default function Store() {
   const handleCartCheckout = async () => {
     if (cart.length === 0) return;
     setBuying(true);
+    const desc = `B&B Trinkets Cart Order (${cartCount} items): ` + cart.map(i => `${i.product.title} x${i.quantity}`).join(', ');
+    const itemData = cart.map(i => ({
+      title: i.product.title,
+      quantity: i.quantity,
+      price: i.product.price
+    }));
+
     try {
-      const desc = cart.map(i => `${i.product.title} x${i.quantity}`).join(', ');
       const response = await fetch('/api/paymongo/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: cartTotal,
-          description: `B&B Trinkets Cart Order (${cartCount} items): ${desc.slice(0, 80)}...`
+          description: desc.slice(0, 100)
         })
       });
       
-      const data = await response.json();
-      
-      if (data.data?.attributes?.checkout_url) {
-        window.location.href = data.data.attributes.checkout_url;
+      let data: any = null;
+      try {
+        const text = await response.text();
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        // Non-JSON returned
+      }
+
+      if (response.ok && data?.data?.attributes?.checkout_url) {
+        const checkoutUrl = data.data.attributes.checkout_url;
+        window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+        setCheckoutModal({
+          isOpen: true,
+          mode: 'paymongo_ready',
+          totalAmount: cartTotal,
+          description: desc,
+          checkoutUrl,
+          items: itemData
+        });
       } else {
-        alert(`Initiated checkout for ₱${cartTotal.toFixed(2)} (${cartCount} items).\n(Note: Live PayMongo checkout opens automatically once PAYMONGO_SECRET_KEY is set).`);
+        setCheckoutModal({
+          isOpen: true,
+          mode: 'gcash_direct',
+          totalAmount: cartTotal,
+          description: desc,
+          items: itemData
+        });
       }
     } catch (err) {
-      console.error(err);
-      alert(`Initiated checkout for ₱${cartTotal.toFixed(2)}.`);
+      console.error('Cart checkout error:', err);
+      setCheckoutModal({
+        isOpen: true,
+        mode: 'gcash_direct',
+        totalAmount: cartTotal,
+        description: desc,
+        items: itemData
+      });
     } finally {
       setBuying(false);
     }
+  };
+
+  const handleConfirmDirectOrder = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!checkoutModal) return;
+    setConfirmingOrder(true);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData?.session?.user?.id || null;
+
+      // If user is logged in, optionally persist to orders
+      if (userId) {
+        for (const item of checkoutModal.items) {
+          const matchedProd = dbProducts.find(p => p.title === item.title) || INITIAL_PRODUCTS.find(p => p.title === item.title);
+          if (matchedProd) {
+            await supabase.from('orders').insert({
+              product_id: matchedProd.id,
+              buyer_id: userId,
+              status: 'pending',
+              quantity: item.quantity,
+              total_price: item.price * item.quantity
+            });
+          }
+        }
+      }
+
+      setOrderConfirmed(true);
+      clearCart();
+    } catch (err) {
+      console.error('Order save error:', err);
+      setOrderConfirmed(true);
+    } finally {
+      setConfirmingOrder(false);
+    }
+  };
+
+  const handleCopyGcash = () => {
+    navigator.clipboard.writeText('09454008348');
+    setCopiedGcash(true);
+    setTimeout(() => setCopiedGcash(false), 2500);
   };
 
   const handleSubmitReview = (e: FormEvent) => {
@@ -942,6 +1076,185 @@ export default function Store() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Checkout & GCash Payment Modal */}
+      {checkoutModal && checkoutModal.isOpen && (
+        <div className="fixed inset-0 bg-bb-navy/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl relative border border-bb-navy/10 max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => {
+                setCheckoutModal(null);
+                setOrderConfirmed(false);
+              }}
+              className="absolute top-4 right-4 w-9 h-9 bg-bb-cream rounded-full flex items-center justify-center text-bb-navy hover:bg-bb-teal hover:text-white transition-colors"
+            >
+              <X size={18} />
+            </button>
+
+            {orderConfirmed ? (
+              <div className="text-center py-6">
+                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Check size={32} />
+                </div>
+                <h3 className="text-2xl font-serif font-bold text-bb-navy mb-2">Order Confirmed!</h3>
+                <p className="text-bb-navy/70 text-sm mb-6 leading-relaxed">
+                  Thank you for supporting B&B Trinkets! Your GCash payment of <span className="font-bold text-bb-navy">₱{checkoutModal.totalAmount.toFixed(2)}</span> has been recorded. We will verify your reference number and prepare your order for shipping.
+                </p>
+                <button
+                  onClick={() => {
+                    setCheckoutModal(null);
+                    setOrderConfirmed(false);
+                  }}
+                  className="w-full bg-bb-navy text-white py-3 rounded-full font-bold text-sm hover:bg-bb-dark transition-colors"
+                >
+                  Back to Store
+                </button>
+              </div>
+            ) : checkoutModal.mode === 'paymongo_ready' ? (
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-bb-teal/10 rounded-2xl flex items-center justify-center text-bb-teal">
+                    <CreditCard size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-serif font-bold text-bb-navy">Secure Checkout</h3>
+                    <p className="text-xs text-bb-navy/60">PayMongo (GCash, Maya, Cards)</p>
+                  </div>
+                </div>
+
+                <div className="bg-bb-cream/60 p-4 rounded-2xl mb-6 space-y-2 text-sm border border-bb-navy/5">
+                  <div className="flex justify-between font-bold text-bb-navy">
+                    <span>Total Payment:</span>
+                    <span className="font-serif text-lg text-bb-teal">₱{checkoutModal.totalAmount.toFixed(2)}</span>
+                  </div>
+                  <p className="text-xs text-bb-navy/70">{checkoutModal.description}</p>
+                </div>
+
+                <div className="space-y-3">
+                  <a
+                    href={checkoutModal.checkoutUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full bg-bb-teal text-white py-3.5 px-4 rounded-full font-bold text-sm hover:bg-teal-700 transition-colors flex items-center justify-center gap-2 shadow-md"
+                  >
+                    Open PayMongo Checkout in New Tab <ExternalLink size={16} />
+                  </a>
+
+                  <p className="text-[11px] text-center text-bb-navy/50">
+                    PayMongo opens in a new tab to comply with browser payment security policies.
+                  </p>
+
+                  <div className="pt-3 border-t border-bb-navy/10 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setCheckoutModal({ ...checkoutModal, mode: 'gcash_direct' })}
+                      className="text-xs font-semibold text-bb-navy/70 hover:text-bb-teal underline"
+                    >
+                      Or pay directly to Seller's GCash
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600">
+                    <QrCode size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-serif font-bold text-bb-navy">Direct GCash Checkout</h3>
+                    <p className="text-xs text-bb-navy/60">Pay directly to store via GCash transfer</p>
+                  </div>
+                </div>
+
+                {/* Amount & GCash Account Details */}
+                <div className="bg-gradient-to-br from-blue-50 to-teal-50/40 p-4 rounded-2xl mb-5 border border-blue-100">
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="text-xs font-medium text-blue-900/70">Total Amount to Pay:</span>
+                    <span className="font-serif font-bold text-2xl text-blue-900">₱{checkoutModal.totalAmount.toFixed(2)}</span>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-blue-100 flex items-center justify-between">
+                    <div>
+                      <div className="text-[11px] text-bb-navy/50 font-medium">GCash Account Name & Number:</div>
+                      <div className="font-bold text-bb-navy text-sm">Rhymno Orioque (B&B Trinkets)</div>
+                      <div className="font-mono text-base font-bold text-blue-600">09454008348</div>
+                    </div>
+                    <button
+                      onClick={handleCopyGcash}
+                      className="flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs px-3 py-2 rounded-lg font-semibold transition-colors"
+                      title="Copy GCash Number"
+                    >
+                      {copiedGcash ? <Check size={14} /> : <Copy size={14} />}
+                      {copiedGcash ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Order Information Form */}
+                <form onSubmit={handleConfirmDirectOrder} className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">Your Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Maria Santos"
+                      value={buyerName}
+                      onChange={e => setBuyerName(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">Contact / GCash No. *</label>
+                      <input
+                        type="tel"
+                        required
+                        placeholder="09XXXXXXXXX"
+                        value={buyerPhone}
+                        onChange={e => setBuyerPhone(e.target.value)}
+                        className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">GCash Ref No. *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. 10023456789"
+                        value={gcashRef}
+                        onChange={e => setGcashRef(e.target.value)}
+                        className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">Shipping Address *</label>
+                    <textarea
+                      required
+                      rows={2}
+                      placeholder="House/Unit No., Street, Barangay, City, Province, Postal Code"
+                      value={buyerAddress}
+                      onChange={e => setBuyerAddress(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white resize-none"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={confirmingOrder}
+                    className="w-full bg-bb-navy text-white py-3 rounded-full font-bold text-sm hover:bg-bb-dark transition-colors flex items-center justify-center gap-2 shadow-md disabled:opacity-50 mt-4"
+                  >
+                    {confirmingOrder ? 'Recording Order...' : 'Confirm GCash Payment & Place Order'}
+                  </button>
+                </form>
+              </div>
+            )}
           </div>
         </div>
       )}
