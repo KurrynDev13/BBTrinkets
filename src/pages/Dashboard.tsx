@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import type { Profile, Product, Order } from '../types';
@@ -60,7 +60,7 @@ export default function Dashboard() {
     if (ords) setOrders(ords);
   };
 
-  const handleAddProduct = async (e: React.FormEvent) => {
+  const handleAddProduct = async (e: FormEvent) => {
     e.preventDefault();
     if (!profile) return;
     
@@ -129,6 +129,7 @@ export default function Dashboard() {
                   <option>Keychains</option>
                   <option>Artworks</option>
                   <option>Prints</option>
+                  <option>Stickers</option>
                 </select>
               </div>
               <div>

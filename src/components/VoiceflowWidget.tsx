@@ -10,24 +10,34 @@ export default function VoiceflowWidget() {
       return;
     }
 
+    // Prevent multiple initializations during React strict mode or HMR
+    if ((window as any).voiceflow?.chat) {
+      return;
+    }
+
     const script = document.createElement('script');
+    script.id = 'voiceflow-widget-script';
     script.onload = () => {
       // @ts-ignore
       window.voiceflow.chat.load({
         verify: { projectID: projectId },
         url: 'https://general-runtime.voiceflow.com',
-        versionID: 'production'
+        versionID: 'development',
+        assistant: {
+          title: "B&B Trinkets Assistant",
+          description: "Your friendly guide to our treasures!"
+        }
       });
     };
     script.src = 'https://cdn.voiceflow.com/widget/bundle.mjs';
     script.type = 'text/javascript';
-    document.body.appendChild(script);
+    
+    if (!document.getElementById('voiceflow-widget-script')) {
+      document.body.appendChild(script);
+    }
 
     return () => {
-      // Cleanup script on unmount
-      if (document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
+      // Do not remove the script or chat on unmount to prevent React 18 strict mode / HMR issues
     };
   }, []);
 

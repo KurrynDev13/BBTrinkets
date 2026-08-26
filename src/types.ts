@@ -6,13 +6,15 @@ export type Profile = {
   created_at: string;
 };
 
+export type ProductCategory = 'Pins' | 'Keychains' | 'Artworks' | 'Prints' | 'Stickers';
+
 export type Product = {
   id: string;
   seller_id: string;
   title: string;
   description: string;
   price: number;
-  category: 'Pins' | 'Keychains' | 'Artworks' | 'Prints';
+  category: ProductCategory;
   image_url: string;
   created_at: string;
 };
