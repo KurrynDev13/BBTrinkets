@@ -22,7 +22,10 @@ import {
   ExternalLink,
   CreditCard,
   QrCode,
-  AlertCircle
+  AlertCircle,
+  Loader2,
+  RefreshCw,
+  CheckCircle2
 } from 'lucide-react';
 
 interface CartItem {
@@ -36,6 +39,7 @@ interface CheckoutData {
   totalAmount: number;
   description: string;
   checkoutUrl?: string;
+  linkId?: string;
   items: { title: string; quantity: number; price: number }[];
 }
 
@@ -70,6 +74,8 @@ export default function Store() {
   const [copiedGcash, setCopiedGcash] = useState(false);
   const [orderConfirmed, setOrderConfirmed] = useState(false);
   const [confirmingOrder, setConfirmingOrder] = useState(false);
+  const [isCheckingPayment, setIsCheckingPayment] = useState(false);
+  const [verifiedPaymentInfo, setVerifiedPaymentInfo] = useState<{ method: string; id?: string } | null>(null);
 
   // Cart state
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -245,6 +251,114 @@ export default function Store() {
     return cart.reduce((sum, item) => sum + item.quantity, 0);
   }, [cart]);
 
+  const finalizeOrder = async (method: string, paymongoId?: string) => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData?.session?.user?.id || null;
+
+      if (userId && checkoutModal) {
+        // Insert main order
+        const { data: createdOrder, error: orderErr } = await supabase
+          .from('orders')
+          .insert({
+            buyer_id: userId,
+            total_amount: checkoutModal.totalAmount,
+            status: 'paid',
+            paymongo_checkout_id: paymongoId || null
+          })
+          .select()
+          .single();
+
+        if (!orderErr && createdOrder) {
+          for (const item of checkoutModal.items) {
+            const matchedProd = dbProducts.find(p => p.title === item.title) || INITIAL_PRODUCTS.find(p => p.title === item.title);
+            if (matchedProd && matchedProd.id.length > 20) {
+              await supabase.from('order_items').insert({
+                order_id: createdOrder.id,
+                product_id: matchedProd.id,
+                quantity: item.quantity,
+                price_at_time: item.price
+              });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error logging order to Supabase:', err);
+    } finally {
+      // Clear shopping bag immediately so items don't remain
+      clearCart();
+      setVerifiedPaymentInfo({
+        method,
+        id: paymongoId
+      });
+      setOrderConfirmed(true);
+    }
+  };
+
+  const checkPayMongoStatus = async (linkId?: string, showFeedback = false) => {
+    const targetId = linkId || checkoutModal?.linkId;
+    if (!targetId) return false;
+
+    setIsCheckingPayment(true);
+    try {
+      const res = await fetch(`/api/paymongo/verify-link?id=${encodeURIComponent(targetId)}`);
+      const data = await res.json();
+
+      if (data && data.status === 'paid') {
+        await finalizeOrder('PayMongo (GCash / Maya / Card)', data.id || targetId);
+        return true;
+      } else {
+        if (showFeedback) {
+          alert('Payment is still awaiting confirmation in PayMongo. If you have completed the payment in the other tab/app, please wait 3-5 seconds and verify again.');
+        }
+        return false;
+      }
+    } catch (err) {
+      console.error('Error verifying PayMongo link:', err);
+      if (showFeedback) {
+        alert('Could not verify payment status with PayMongo yet. Please check your connection and try again.');
+      }
+      return false;
+    } finally {
+      setIsCheckingPayment(false);
+    }
+  };
+
+  // Auto-polling & tab focus listener for live payment verification
+  useEffect(() => {
+    if (!checkoutModal?.isOpen || checkoutModal.mode !== 'paymongo_ready' || !checkoutModal.linkId || orderConfirmed) {
+      return;
+    }
+
+    const currentLinkId = checkoutModal.linkId;
+
+    // 1. Polling check every 3.5 seconds
+    const interval = setInterval(() => {
+      checkPayMongoStatus(currentLinkId, false);
+    }, 3500);
+
+    // 2. Immediate check when returning to this tab
+    const handleFocus = () => {
+      checkPayMongoStatus(currentLinkId, false);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkPayMongoStatus(currentLinkId, false);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [checkoutModal?.isOpen, checkoutModal?.mode, checkoutModal?.linkId, orderConfirmed]);
+
   const handleBuySingle = async () => {
     if (!selectedProduct) return;
     setBuying(true);
@@ -277,14 +391,16 @@ export default function Store() {
 
       if (response.ok && data?.data?.attributes?.checkout_url) {
         const checkoutUrl = data.data.attributes.checkout_url;
-        // Attempt popup in new tab safely
-        const win = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+        const linkId = data.data.id;
+        // Open in new tab
+        window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
         setCheckoutModal({
           isOpen: true,
           mode: 'paymongo_ready',
           totalAmount,
           description: desc,
           checkoutUrl,
+          linkId,
           items: itemData
         });
       } else {
@@ -341,6 +457,7 @@ export default function Store() {
 
       if (response.ok && data?.data?.attributes?.checkout_url) {
         const checkoutUrl = data.data.attributes.checkout_url;
+        const linkId = data.data.id;
         window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
         setCheckoutModal({
           isOpen: true,
@@ -348,6 +465,7 @@ export default function Store() {
           totalAmount: cartTotal,
           description: desc,
           checkoutUrl,
+          linkId,
           items: itemData
         });
       } else {
@@ -379,30 +497,11 @@ export default function Store() {
     setConfirmingOrder(true);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const userId = sessionData?.session?.user?.id || null;
-
-      // If user is logged in, optionally persist to orders
-      if (userId) {
-        for (const item of checkoutModal.items) {
-          const matchedProd = dbProducts.find(p => p.title === item.title) || INITIAL_PRODUCTS.find(p => p.title === item.title);
-          if (matchedProd) {
-            await supabase.from('orders').insert({
-              product_id: matchedProd.id,
-              buyer_id: userId,
-              status: 'pending',
-              quantity: item.quantity,
-              total_price: item.price * item.quantity
-            });
-          }
-        }
-      }
-
-      setOrderConfirmed(true);
-      clearCart();
+      await finalizeOrder('Direct GCash Transfer (Ref: ' + gcashRef + ')');
     } catch (err) {
       console.error('Order save error:', err);
       setOrderConfirmed(true);
+      clearCart();
     } finally {
       setConfirmingOrder(false);
     }
@@ -1095,22 +1194,58 @@ export default function Store() {
             </button>
 
             {orderConfirmed ? (
-              <div className="text-center py-6">
-                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="text-center py-4">
+                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
                   <Check size={32} />
                 </div>
-                <h3 className="text-2xl font-serif font-bold text-bb-navy mb-2">Order Confirmed!</h3>
-                <p className="text-bb-navy/70 text-sm mb-6 leading-relaxed">
-                  Thank you for supporting B&B Trinkets! Your GCash payment of <span className="font-bold text-bb-navy">₱{checkoutModal.totalAmount.toFixed(2)}</span> has been recorded. We will verify your reference number and prepare your order for shipping.
+                <h3 className="text-2xl font-serif font-bold text-bb-navy mb-1">Order Confirmed!</h3>
+                <p className="text-xs font-semibold text-emerald-700 mb-4 flex items-center justify-center gap-1.5">
+                  <CheckCircle2 size={15} /> Payment Verified & Bag Cleared
                 </p>
+
+                <div className="bg-bb-cream/60 rounded-2xl p-4 text-left mb-6 border border-bb-navy/5 space-y-2">
+                  <div className="flex justify-between items-center text-xs pb-2 border-b border-bb-navy/10">
+                    <span className="text-bb-navy/60 font-medium">Total Paid:</span>
+                    <span className="font-serif font-bold text-base text-bb-navy">₱{checkoutModal.totalAmount.toFixed(2)}</span>
+                  </div>
+                  {verifiedPaymentInfo?.method && (
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-bb-navy/60 font-medium">Payment Channel:</span>
+                      <span className="font-semibold text-bb-navy">{verifiedPaymentInfo.method}</span>
+                    </div>
+                  )}
+                  {verifiedPaymentInfo?.id && (
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-bb-navy/60 font-medium">Reference ID:</span>
+                      <span className="font-mono font-semibold text-bb-teal text-[11px]">{verifiedPaymentInfo.id}</span>
+                    </div>
+                  )}
+                  <div className="pt-2 border-t border-bb-navy/10">
+                    <span className="text-[11px] text-bb-navy/50 font-bold uppercase tracking-wider block mb-1">Items in this order:</span>
+                    <div className="space-y-1">
+                      {checkoutModal.items.map((item, idx) => (
+                        <div key={idx} className="flex justify-between text-xs text-bb-navy/80">
+                          <span>{item.title} <span className="text-bb-navy/50">x{item.quantity}</span></span>
+                          <span className="font-medium">₱{(item.price * item.quantity).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-bb-navy/70 text-xs mb-6 leading-relaxed">
+                  Thank you for shopping at B&B Trinkets! Your payment has been verified. We are now preparing your handcrafted items.
+                </p>
+
                 <button
                   onClick={() => {
                     setCheckoutModal(null);
                     setOrderConfirmed(false);
+                    setVerifiedPaymentInfo(null);
                   }}
-                  className="w-full bg-bb-navy text-white py-3 rounded-full font-bold text-sm hover:bg-bb-dark transition-colors"
+                  className="w-full bg-bb-navy text-white py-3 rounded-full font-bold text-sm hover:bg-bb-dark transition-colors shadow-md"
                 >
-                  Back to Store
+                  Continue Shopping
                 </button>
               </div>
             ) : checkoutModal.mode === 'paymongo_ready' ? (
@@ -1125,7 +1260,16 @@ export default function Store() {
                   </div>
                 </div>
 
-                <div className="bg-bb-cream/60 p-4 rounded-2xl mb-6 space-y-2 text-sm border border-bb-navy/5">
+                {/* Live Payment Polling Badge */}
+                <div className="flex items-center justify-center gap-2.5 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200/80 px-3.5 py-2.5 rounded-2xl mb-4">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-teal-600"></span>
+                  </span>
+                  <span>Listening for payment confirmation...</span>
+                </div>
+
+                <div className="bg-bb-cream/60 p-4 rounded-2xl mb-5 space-y-2 text-sm border border-bb-navy/5">
                   <div className="flex justify-between font-bold text-bb-navy">
                     <span>Total Payment:</span>
                     <span className="font-serif text-lg text-bb-teal">₱{checkoutModal.totalAmount.toFixed(2)}</span>
@@ -1140,11 +1284,22 @@ export default function Store() {
                     rel="noopener noreferrer"
                     className="w-full bg-bb-teal text-white py-3.5 px-4 rounded-full font-bold text-sm hover:bg-teal-700 transition-colors flex items-center justify-center gap-2 shadow-md"
                   >
-                    Open PayMongo Checkout in New Tab <ExternalLink size={16} />
+                    Open PayMongo Payment Window <ExternalLink size={16} />
                   </a>
 
-                  <p className="text-[11px] text-center text-bb-navy/50">
-                    PayMongo opens in a new tab to comply with browser payment security policies.
+                  {/* Manual Verify Status Button */}
+                  <button
+                    type="button"
+                    onClick={() => checkPayMongoStatus(undefined, true)}
+                    disabled={isCheckingPayment}
+                    className="w-full bg-bb-navy text-white py-3 px-4 rounded-full font-bold text-xs hover:bg-bb-dark transition-colors flex items-center justify-center gap-2 disabled:opacity-60 shadow-sm"
+                  >
+                    <RefreshCw size={14} className={isCheckingPayment ? "animate-spin" : ""} />
+                    {isCheckingPayment ? 'Verifying with PayMongo...' : "I've Paid — Check Payment Status"}
+                  </button>
+
+                  <p className="text-[11px] text-center text-bb-navy/60 leading-relaxed px-2">
+                    Once approved in GCash / PayMongo, this window will automatically confirm your order and clear your shopping bag.
                   </p>
 
                   <div className="pt-3 border-t border-bb-navy/10 text-center">

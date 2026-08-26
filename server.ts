@@ -61,6 +61,50 @@ async function startServer() {
     }
   });
 
+  // Paymongo: Verify Link Status
+  app.get('/api/paymongo/verify-link', async (req, res) => {
+    try {
+      const id = req.query.id as string;
+      if (!id) {
+        return res.status(400).json({ error: 'PayMongo Link ID is required.' });
+      }
+
+      const secretKey = process.env.PAYMONGO_SECRET_KEY;
+      if (!secretKey) {
+        return res.status(400).json({ error: 'PAYMONGO_SECRET_KEY is not configured on the server.' });
+      }
+
+      const response = await fetch(`https://api.paymongo.com/v1/links/${id}`, {
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+          authorization: `Basic ${Buffer.from(secretKey + ':').toString('base64')}`
+        }
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        return res.status(response.status).json({
+          error: data.errors?.[0]?.detail || 'Failed to verify PayMongo link',
+          details: data
+        });
+      }
+
+      const attr = data.data?.attributes || {};
+      res.json({
+        id: data.data?.id,
+        status: attr.status,
+        amount: attr.amount ? attr.amount / 100 : 0,
+        description: attr.description,
+        payments: attr.payments || [],
+        paid_at: attr.paid_at || (attr.payments?.[0]?.attributes?.paid_at)
+      });
+    } catch (error: any) {
+      console.error('PayMongo verify link error:', error);
+      res.status(500).json({ error: error.message || 'Payment verification failed' });
+    }
+  });
+
   // Paymongo Webhook Endpoint
   app.post('/api/paymongo/webhook', (req, res) => {
     console.log('Received Paymongo Webhook:', req.body);
