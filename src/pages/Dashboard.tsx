@@ -25,27 +25,64 @@ export default function Dashboard() {
   }, []);
 
   const checkUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      navigate('/auth');
-      return;
-    }
-
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .single();
-      
-    if (data) {
-      setProfile(data);
-      if (data.role === 'seller') {
-        fetchSellerData(data.id);
-      } else {
-        fetchBuyerData(data.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/auth');
+        return;
       }
+
+      // Try fetching profile
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      let activeProfile: Profile | null = data;
+
+      // Self-heal: if profile does not exist yet (e.g. created before RLS fix), create it
+      if (!activeProfile) {
+        const metadata = session.user.user_metadata || {};
+        const fallbackProfile: Profile = {
+          id: session.user.id,
+          role: metadata.role === 'seller' ? 'seller' : 'buyer',
+          full_name: metadata.full_name || session.user.email?.split('@')[0] || 'User',
+          gcash_number: metadata.gcash_number || '',
+          created_at: new Date().toISOString()
+        };
+
+        const { data: createdProfile } = await supabase
+          .from('profiles')
+          .upsert({
+            id: fallbackProfile.id,
+            role: fallbackProfile.role,
+            full_name: fallbackProfile.full_name,
+            gcash_number: fallbackProfile.gcash_number
+          })
+          .select()
+          .maybeSingle();
+
+        activeProfile = createdProfile || fallbackProfile;
+      }
+
+      setProfile(activeProfile);
+
+      if (activeProfile.role === 'seller') {
+        fetchSellerData(activeProfile.id);
+      } else {
+        fetchBuyerData(activeProfile.id);
+      }
+    } catch (err) {
+      console.error('Error loading dashboard:', err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate('/auth');
   };
 
   const fetchSellerData = async (userId: string) => {
@@ -100,6 +137,12 @@ export default function Dashboard() {
             </p>
           </div>
         </div>
+        <button
+          onClick={handleSignOut}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-bb-navy/20 text-bb-navy hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors font-medium text-sm"
+        >
+          <LogOut size={16} /> Sign Out
+        </button>
       </div>
 
       {profile.role === 'seller' ? (

@@ -32,36 +32,37 @@ export default function Auth() {
         if (error) throw error;
         navigate('/dashboard');
       } else {
-        // Register
+        // Register with metadata so trigger can automatically create profile
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: {
+              full_name: fullName,
+              role: role,
+              gcash_number: gcash,
+            }
+          }
         });
         
         if (authError) throw authError;
 
         if (authData.user) {
-          // Wait a moment for trigger to possibly run, though we are manually inserting
-          // Actually, our schema relies on inserting the profile directly or having a trigger.
-          // Since we didn't add a trigger in schema.sql, we manually insert:
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert([
-              { 
+          // If session exists immediately, attempt upsert profile as well
+          if (authData.session) {
+            await supabase
+              .from('profiles')
+              .upsert({ 
                 id: authData.user.id, 
                 role, 
                 full_name: fullName, 
                 gcash_number: gcash 
-              }
-            ]);
-            
-          // Note: if RLS blocks this, you might need a trigger in Supabase.
-          // For AI Studio demo, we'll alert success.
-          if (profileError && profileError.code !== '23505') {
-            console.error('Profile creation error:', profileError);
+              });
+            navigate('/dashboard');
+            return;
           }
           
-          alert('Registration successful! Please sign in.');
+          alert('Registration successful! Please sign in with your email and password.');
           setIsLogin(true);
         }
       }
