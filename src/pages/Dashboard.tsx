@@ -28,13 +28,15 @@ import {
   UserCheck,
   Clock,
   Crown,
-  CreditCard
+  CreditCard,
+  Trash2
 } from 'lucide-react';
 import BuyerOrdersSection from '../components/BuyerOrdersSection';
 import SellerOrdersSection from '../components/SellerOrdersSection';
 import SellerReviewsSection from '../components/SellerReviewsSection';
 import AdminSellerApplicationsSection from '../components/AdminSellerApplicationsSection';
 import PendingSellerNotice from '../components/PendingSellerNotice';
+import DeleteAccountModal from '../components/DeleteAccountModal';
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -44,6 +46,7 @@ export default function Dashboard() {
   const [applications, setApplications] = useState<SellerApplication[]>([]);
   const [userApplication, setUserApplication] = useState<SellerApplication | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   
   // Seller View Sub-tabs: 'fulfillment' | 'catalog' | 'reviews' | 'applications'
   const [sellerViewTab, setSellerViewTab] = useState<'fulfillment' | 'catalog' | 'reviews' | 'applications'>('fulfillment');
@@ -933,65 +936,12 @@ export default function Dashboard() {
     }
   };
 
-  // Submit Twin Artist Application from Collector view
-  const handleApplyForTwinArtistAccess = async (data: {
-    fullName: string;
-    gcashNumber: string;
-    craftCategory: string;
-    bio?: string;
-  }) => {
-    if (!profile) return;
-    const now = new Date().toISOString();
-    try {
-      // 1. Insert into seller_applications
-      const { error: appErr } = await supabase
-        .from('seller_applications')
-        .upsert({
-          user_id: profile.id,
-          full_name: data.fullName,
-          email: profile.email,
-          gcash_number: data.gcashNumber,
-          shop_name: 'B&B Twin Artists Studio',
-          craft_category: data.craftCategory,
-          bio_or_experience: data.bio || '',
-          status: 'pending',
-          applied_at: now
-        });
-
-      if (appErr) console.warn('Application insert notice:', appErr);
-
-      // 2. Update profiles table
-      const { error: profErr } = await supabase
-        .from('profiles')
-        .update({
-          role: 'seller',
-          seller_status: 'pending',
-          full_name: data.fullName,
-          gcash_number: data.gcashNumber,
-          craft_category: data.craftCategory,
-          bio: data.bio || '',
-          updated_at: now
-        })
-        .eq('id', profile.id);
-
-      if (profErr) console.warn('Profile update notice:', profErr);
-
-      const updated: Profile = {
-        ...profile,
-        role: 'seller',
-        seller_status: 'pending',
-        full_name: data.fullName,
-        gcash_number: data.gcashNumber,
-        craft_category: data.craftCategory,
-        bio: data.bio || ''
-      };
-
-      setProfile(updated);
-      await refreshAllData(updated);
-      alert('Twin Artist Application submitted! Developer & Admin (Rhym) has received your request.');
-    } catch (err: any) {
-      alert('Error submitting application: ' + (err.message || 'Unknown error'));
-    }
+  // Handle Account Deletion Callback
+  const handleAccountDeleted = () => {
+    setIsDeleteModalOpen(false);
+    setProfile(null);
+    alert('Your account and data have been permanently deleted.');
+    navigate('/', { replace: true });
   };
 
   // Count pending applications for Admin badge
@@ -1133,9 +1083,17 @@ export default function Dashboard() {
 
               <button
                 onClick={handleSignOut}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-red-200 text-red-600 hover:bg-red-50 transition-colors font-semibold text-xs shadow-xs cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-bb-navy/15 text-bb-navy hover:bg-bb-cream transition-colors font-semibold text-xs shadow-xs cursor-pointer"
               >
                 <LogOut size={14} /> Sign Out
+              </button>
+
+              <button
+                onClick={() => setIsDeleteModalOpen(true)}
+                title="Permanently delete account and all associated data"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors font-semibold text-xs shadow-xs cursor-pointer"
+              >
+                <Trash2 size={13} /> Delete Account
               </button>
             </div>
           </div>
@@ -1215,6 +1173,7 @@ export default function Dashboard() {
               onSwitchToBuyerMode={handleSwitchToCollectorMode}
               onUpdateApplication={handleUpdateApplicantProfile}
               onConfirmDeclinedAndConvertToCollector={handleAcknowledgeDeclinedAndConvertToCollector}
+              onDeleteAccount={() => setIsDeleteModalOpen(true)}
             />
           ) : (
             /* VERIFIED SELLER / ADMIN SELLER DASHBOARD */
@@ -1518,6 +1477,14 @@ export default function Dashboard() {
             />
           </div>
         )}
+
+        {/* Delete Account Confirmation Modal */}
+        <DeleteAccountModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => setIsDeleteModalOpen(false)}
+          profile={profile}
+          onDeleted={handleAccountDeleted}
+        />
 
       </div>
     </div>

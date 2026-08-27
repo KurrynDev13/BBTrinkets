@@ -10,7 +10,8 @@ import {
   RefreshCw, 
   XCircle,
   CreditCard,
-  Crown
+  Crown,
+  Trash2
 } from 'lucide-react';
 import type { Profile, SellerApplication } from '../types';
 import { Link } from 'react-router-dom';
@@ -22,6 +23,7 @@ interface PendingSellerNoticeProps {
   onSwitchToBuyerMode: () => void;
   onUpdateApplication?: (updatedData: Partial<Profile>) => Promise<void>;
   onConfirmDeclinedAndConvertToCollector?: () => Promise<void>;
+  onDeleteAccount?: () => void;
 }
 
 export default function PendingSellerNotice({
@@ -29,7 +31,8 @@ export default function PendingSellerNotice({
   application,
   onRefresh,
   onSwitchToBuyerMode,
-  onConfirmDeclinedAndConvertToCollector
+  onConfirmDeclinedAndConvertToCollector,
+  onDeleteAccount
 }: PendingSellerNoticeProps) {
   const [isConverting, setIsConverting] = useState(false);
   const isRejected = profile.seller_status === 'rejected' || application?.status === 'rejected';
@@ -224,6 +227,19 @@ export default function PendingSellerNotice({
           </div>
         </div>
       </div>
+
+      {onDeleteAccount && (
+        <div className="text-center pt-2">
+          <button
+            type="button"
+            onClick={onDeleteAccount}
+            className="text-xs text-rose-600 hover:text-rose-700 hover:underline font-semibold inline-flex items-center gap-1.5 cursor-pointer opacity-80 hover:opacity-100 transition-opacity"
+          >
+            <Trash2 size={13} />
+            Request to delete account
+          </button>
+        </div>
+      )}
     </div>
   );
 }

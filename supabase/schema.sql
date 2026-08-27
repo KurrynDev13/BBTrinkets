@@ -46,6 +46,10 @@ CREATE POLICY "Users can insert their own profile." ON public.profiles FOR INSER
 CREATE POLICY "Users can update own profile." ON public.profiles FOR UPDATE USING (
   auth.uid() = id OR public.is_admin() OR auth.jwt()->>'email' = 'rhymnoorioque@gmail.com'
 );
+DROP POLICY IF EXISTS "Users can delete own profile." ON public.profiles;
+CREATE POLICY "Users can delete own profile." ON public.profiles FOR DELETE USING (
+  auth.uid() = id OR public.is_admin() OR auth.jwt()->>'email' = 'rhymnoorioque@gmail.com'
+);
 CREATE POLICY "Admins can update all profiles." ON public.profiles FOR ALL USING (
   public.is_admin() OR auth.jwt()->>'email' = 'rhymnoorioque@gmail.com'
 );

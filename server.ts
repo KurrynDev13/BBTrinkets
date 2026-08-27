@@ -151,6 +151,56 @@ async function startServer() {
     }
   });
 
+  // User: Permanently delete account and all associated records from Supabase
+  app.post('/api/user/delete-account', async (req, res) => {
+    try {
+      const { userId } = req.body || {};
+      if (!userId) {
+        return res.status(400).json({ error: 'userId is required' });
+      }
+
+      const client = getSupabaseServer();
+      if (client) {
+        // 1. Delete user reviews
+        await client.from('reviews').delete().eq('user_id', userId);
+
+        // 2. Delete buyer orders and order items
+        const { data: userOrders } = await client.from('orders').select('id').eq('buyer_id', userId);
+        if (userOrders && userOrders.length > 0) {
+          const orderIds = userOrders.map((o: any) => o.id);
+          await client.from('order_items').delete().in('order_id', orderIds);
+          await client.from('orders').delete().eq('buyer_id', userId);
+        }
+
+        // 3. Delete user seller products if any
+        await client.from('products').delete().eq('seller_id', userId);
+
+        // 4. Delete seller applications
+        await client.from('seller_applications').delete().eq('user_id', userId);
+
+        // 5. Delete profile record
+        await client.from('profiles').delete().eq('id', userId);
+
+        // 6. Delete from Supabase Auth via admin API if available
+        try {
+          if (client.auth && client.auth.admin && typeof client.auth.admin.deleteUser === 'function') {
+            await client.auth.admin.deleteUser(userId);
+          }
+        } catch (authAdminErr) {
+          console.warn('Supabase auth.admin.deleteUser warning (non-fatal):', authAdminErr);
+        }
+      }
+
+      return res.json({
+        success: true,
+        message: 'Account and associated records deleted permanently from Supabase.'
+      });
+    } catch (err: any) {
+      console.error('Error deleting user account:', err);
+      return res.status(500).json({ error: err.message || 'Failed to delete account' });
+    }
+  });
+
   // Paymongo: Create a Checkout Link
   app.post('/api/paymongo/checkout', async (req, res) => {
     try {
