@@ -37,6 +37,7 @@ import SellerReviewsSection from '../components/SellerReviewsSection';
 import AdminSellerApplicationsSection from '../components/AdminSellerApplicationsSection';
 import PendingSellerNotice from '../components/PendingSellerNotice';
 import DeleteAccountModal from '../components/DeleteAccountModal';
+import RequestTwinAccessModal from '../components/RequestTwinAccessModal';
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -47,6 +48,7 @@ export default function Dashboard() {
   const [userApplication, setUserApplication] = useState<SellerApplication | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isRequestTwinModalOpen, setIsRequestTwinModalOpen] = useState(false);
   
   // Seller View Sub-tabs: 'fulfillment' | 'catalog' | 'reviews' | 'applications'
   const [sellerViewTab, setSellerViewTab] = useState<'fulfillment' | 'catalog' | 'reviews' | 'applications'>('fulfillment');
@@ -89,28 +91,54 @@ export default function Dashboard() {
       const isFoundingAdmin = userEmail.toLowerCase() === 'rhymnoorioque@gmail.com';
       const metadata = session.user.user_metadata || {};
 
-      // Try fetching profile from Supabase
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .maybeSingle();
+      // 1. Fetch profile and seller application in parallel from Supabase and Server API
+      let [dbProfileRes, dbAppRes, serverStatusRes] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle(),
+        supabase.from('seller_applications').select('*').eq('user_id', session.user.id).maybeSingle(),
+        fetch(`/api/user/status?userId=${session.user.id}&email=${encodeURIComponent(userEmail)}`).then(r => r.ok ? r.json() : null).catch(() => null)
+      ]);
 
-      let activeProfile: Profile | null = data;
+      let activeProfile: Profile | null = dbProfileRes.data || serverStatusRes?.profile || null;
+      let activeApp: SellerApplication | null = dbAppRes.data || serverStatusRes?.application || null;
 
-      // Self-heal: if profile does not exist yet, create or fallback
+      // 2. Determine authoritative status
+      const isAdmin = isFoundingAdmin || metadata.is_admin === true || activeProfile?.is_admin === true;
+      
+      let determinedRole: 'seller' | 'buyer' = 'buyer';
+      let determinedStatus: 'approved' | 'pending' | 'rejected' | 'none' = 'none';
+
+      if (isAdmin) {
+        determinedRole = 'seller';
+        determinedStatus = 'approved';
+      } else if (activeApp?.status === 'approved' || activeProfile?.seller_status === 'approved') {
+        determinedRole = 'seller';
+        determinedStatus = 'approved';
+      } else if (activeApp?.status === 'rejected' || activeProfile?.seller_status === 'rejected') {
+        determinedRole = 'seller';
+        determinedStatus = 'rejected';
+      } else if (
+        activeApp?.status === 'pending' ||
+        metadata.role === 'seller' ||
+        metadata.seller_status === 'pending' ||
+        activeProfile?.seller_status === 'pending' ||
+        activeProfile?.role === 'seller'
+      ) {
+        determinedRole = 'seller';
+        determinedStatus = 'pending';
+      } else {
+        determinedRole = 'buyer';
+        determinedStatus = 'none';
+      }
+
+      // 3. Construct or update profile object
       if (!activeProfile) {
-        const isAdmin = isFoundingAdmin || metadata.is_admin === true;
-        const initialRole = isAdmin ? 'seller' : (metadata.role === 'seller' ? 'seller' : 'buyer');
-        const initialStatus = isAdmin ? 'approved' : (metadata.seller_status || (initialRole === 'seller' ? 'pending' : 'none'));
-
-        const fallbackProfile: Profile = {
+        activeProfile = {
           id: session.user.id,
-          role: initialRole,
+          role: determinedRole,
           email: userEmail,
-          full_name: metadata.full_name || (isAdmin ? 'Rhym Noor' : (userEmail.split('@')[0] || 'Collector')),
+          full_name: metadata.full_name || (isAdmin ? 'Rhym Noor' : (userEmail.split('@')[0] || 'User')),
           gcash_number: metadata.gcash_number || '',
-          seller_status: initialStatus,
+          seller_status: determinedStatus,
           is_admin: isAdmin,
           shop_name: metadata.shop_name || (isAdmin ? 'B&B Twin Artists Studio (Admin)' : 'B&B Twin Artists Studio'),
           craft_category: metadata.craft_category || 'Pins & Artwork',
@@ -118,87 +146,81 @@ export default function Dashboard() {
           bio: metadata.bio || '',
           created_at: new Date().toISOString()
         };
-
-        const { data: createdProfile } = await supabase
-          .from('profiles')
-          .upsert({
-            id: fallbackProfile.id,
-            role: fallbackProfile.role,
-            email: fallbackProfile.email,
-            full_name: fallbackProfile.full_name,
-            gcash_number: fallbackProfile.gcash_number,
-            seller_status: fallbackProfile.seller_status,
-            is_admin: fallbackProfile.is_admin,
-            shop_name: fallbackProfile.shop_name,
-            craft_category: fallbackProfile.craft_category,
-            portfolio_url: fallbackProfile.portfolio_url,
-            bio: fallbackProfile.bio
-          })
-          .select()
-          .maybeSingle();
-
-        activeProfile = createdProfile || fallbackProfile;
       } else {
-        // Enforce Admin badge for developer/admin
-        if (isFoundingAdmin && (!activeProfile.is_admin || activeProfile.seller_status !== 'approved')) {
-          activeProfile = {
-            ...activeProfile,
-            is_admin: true,
-            seller_status: 'approved',
-            role: 'seller'
-          };
-          // Persist fix
-          supabase.from('profiles').update({ is_admin: true, seller_status: 'approved', role: 'seller' }).eq('id', activeProfile.id).then();
-        }
+        activeProfile = {
+          ...activeProfile,
+          role: determinedRole,
+          seller_status: determinedStatus,
+          is_admin: isAdmin
+        };
       }
 
-      // Check if this is a twin artist applicant needing synchronization
-      if (!isFoundingAdmin && activeProfile) {
-        // If user is a regular collector (role === 'buyer' && seller_status === 'none'), do NOT force back into seller/applicant
-        if (activeProfile.role === 'buyer' && (!activeProfile.seller_status || activeProfile.seller_status === 'none')) {
-          activeProfile.seller_status = 'none';
-        } else if (activeProfile.seller_status === 'rejected') {
-          // Keep seller_status as rejected so PendingSellerNotice shows confirmation dialog
-          activeProfile.role = 'seller';
-        } else if (activeProfile.seller_status === 'approved') {
-          activeProfile.role = 'seller';
-        } else {
-          // Check if user registered with twin artist access request
-          const isApplicant = metadata.role === 'seller' || metadata.seller_status === 'pending' || activeProfile.role === 'seller' || activeProfile.seller_status === 'pending';
-          
-          if (isApplicant && activeProfile.seller_status !== 'none') {
-            activeProfile.role = 'seller';
-            activeProfile.seller_status = 'pending';
+      // 4. If user is a pending applicant, self-heal application record in DB and server
+      if (determinedStatus === 'pending' && !isAdmin) {
+        if (!activeApp) {
+          try {
+            await fetch('/api/user/request-twin-access', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userId: session.user.id,
+                email: userEmail,
+                fullName: activeProfile.full_name || metadata.full_name || userEmail.split('@')[0],
+                gcash: activeProfile.gcash_number || metadata.gcash_number || '09000000000',
+                shopName: activeProfile.shop_name || 'B&B Twin Artists Studio',
+                craftCategory: activeProfile.craft_category || 'Pins & Artwork'
+              })
+            });
+          } catch (e) {
+            console.warn('Auto self-heal server submission:', e);
+          }
 
-            // Ensure seller application row exists in seller_applications table safely
-            try {
-              const { data: existingApp } = await supabase
-                .from('seller_applications')
-                .select('id, status')
-                .eq('user_id', session.user.id)
-                .maybeSingle();
+          try {
+            const { data: createdApp } = await supabase
+              .from('seller_applications')
+              .upsert({
+                user_id: session.user.id,
+                full_name: activeProfile.full_name || metadata.full_name || userEmail.split('@')[0],
+                email: userEmail,
+                gcash_number: activeProfile.gcash_number || metadata.gcash_number || '09000000000',
+                shop_name: activeProfile.shop_name || 'B&B Twin Artists Studio',
+                craft_category: activeProfile.craft_category || 'Pins & Artwork',
+                status: 'pending',
+                applied_at: new Date().toISOString()
+              })
+              .select()
+              .maybeSingle();
 
-              if (!existingApp) {
-                await supabase.from('seller_applications').upsert({
-                  user_id: session.user.id,
-                  full_name: activeProfile.full_name || metadata.full_name || userEmail.split('@')[0],
-                  email: userEmail,
-                  gcash_number: activeProfile.gcash_number || metadata.gcash_number || '09000000000',
-                  shop_name: 'B&B Twin Artists Studio',
-                  craft_category: activeProfile.craft_category || 'Pins & Artwork',
-                  status: 'pending',
-                  applied_at: new Date().toISOString()
-                });
-              } else if (existingApp.status === 'rejected' || existingApp.status === 'approved') {
-                activeProfile.seller_status = existingApp.status;
-              }
-            } catch (syncErr) {
-              console.warn('Sync notice:', syncErr);
-            }
+            if (createdApp) activeApp = createdApp;
+          } catch (e) {
+            console.warn('Auto self-heal DB application:', e);
           }
         }
       }
 
+      // Persist profile fixes to DB in background
+      try {
+        supabase
+          .from('profiles')
+          .upsert({
+            id: activeProfile.id,
+            role: activeProfile.role,
+            email: activeProfile.email,
+            full_name: activeProfile.full_name,
+            gcash_number: activeProfile.gcash_number,
+            seller_status: activeProfile.seller_status,
+            is_admin: activeProfile.is_admin,
+            shop_name: activeProfile.shop_name,
+            craft_category: activeProfile.craft_category,
+            portfolio_url: activeProfile.portfolio_url,
+            bio: activeProfile.bio
+          })
+          .then();
+      } catch (profPersistErr) {
+        console.warn('Profile persist warning:', profPersistErr);
+      }
+
+      setUserApplication(activeApp);
       setProfile(activeProfile);
 
       // Load data according to role & admin status
@@ -1070,6 +1092,15 @@ export default function Dashboard() {
 
             {/* Quick Actions */}
             <div className="flex flex-wrap items-center gap-2.5 self-stretch sm:self-auto justify-end">
+              {profile.role === 'buyer' && !isPendingSeller && !isRejectedSeller && !isApprovedSeller && (
+                <button
+                  onClick={() => setIsRequestTwinModalOpen(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-amber-600 hover:bg-amber-700 text-white transition-colors font-bold text-xs shadow-xs cursor-pointer"
+                >
+                  <Sparkles size={13} /> Request Twin Artist Access
+                </button>
+              )}
+
               {canSwitchRole && (
                 <button
                   onClick={handleToggleRole}
@@ -1469,6 +1500,27 @@ export default function Dashboard() {
         ) : (
           /* ---------------- BUYER EXPERIENCE (COLLECTOR) ---------------- */
           <div className="space-y-8">
+            {/* Twin Artist Access Request Banner */}
+            <div className="bg-gradient-to-r from-amber-50 via-white to-orange-50/50 p-6 rounded-3xl border border-amber-200 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 shadow-inner">
+                  <Sparkles size={24} />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-base text-bb-navy">Are you a Twin Artist?</h3>
+                  <p className="text-xs text-bb-navy/70 mt-0.5 max-w-xl">
+                    Request Twin Artist access to upload handcrafted pins, keychains, prints, and artworks to the studio catalog.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsRequestTwinModalOpen(true)}
+                className="px-5 py-2.5 rounded-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <Sparkles size={13} /> Request Twin Artist Access
+              </button>
+            </div>
+
             <BuyerOrdersSection
               orders={orders}
               onRefresh={() => refreshAllData(profile)}
@@ -1477,6 +1529,17 @@ export default function Dashboard() {
             />
           </div>
         )}
+
+        {/* Request Twin Artist Access Modal */}
+        <RequestTwinAccessModal
+          isOpen={isRequestTwinModalOpen}
+          onClose={() => setIsRequestTwinModalOpen(false)}
+          profile={profile}
+          onApplicationSubmitted={(updatedProfile) => {
+            setProfile(updatedProfile);
+            checkUser();
+          }}
+        />
 
         {/* Delete Account Confirmation Modal */}
         <DeleteAccountModal

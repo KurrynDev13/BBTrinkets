@@ -82,12 +82,149 @@ async function startServer() {
     }
   });
 
+  // User: Request Twin Artist Access (at signup or from collector dashboard)
+  app.post('/api/user/request-twin-access', async (req, res) => {
+    try {
+      const { 
+        userId, 
+        email, 
+        fullName, 
+        gcash, 
+        shopName, 
+        craftCategory, 
+        portfolioUrl, 
+        bio 
+      } = req.body || {};
+
+      if (!userId || !email) {
+        return res.status(400).json({ error: 'userId and email are required.' });
+      }
+
+      const client = getSupabaseServer();
+      const now = new Date().toISOString();
+      const isAdmin = email.trim().toLowerCase() === 'rhymnoorioque@gmail.com';
+      const targetStatus = isAdmin ? 'approved' : 'pending';
+      const cleanFullName = fullName?.trim() || email.split('@')[0];
+      const cleanShop = shopName?.trim() || 'B&B Twin Artists Studio';
+      const cleanCategory = craftCategory?.trim() || 'Pins & Artwork';
+      const cleanGcash = gcash?.trim() || '09000000000';
+
+      let savedProfile = null;
+      let savedApplication = null;
+
+      if (client) {
+        // 1. Upsert Profile
+        const { data: profData, error: profErr } = await client
+          .from('profiles')
+          .upsert({
+            id: userId,
+            role: 'seller',
+            email: email.trim(),
+            full_name: cleanFullName,
+            gcash_number: cleanGcash,
+            seller_status: targetStatus,
+            is_admin: isAdmin,
+            shop_name: cleanShop,
+            craft_category: cleanCategory,
+            portfolio_url: portfolioUrl?.trim() || '',
+            bio: bio?.trim() || '',
+            updated_at: now
+          })
+          .select()
+          .maybeSingle();
+
+        if (profErr) {
+          console.warn('Profile upsert warning in server.ts:', profErr.message);
+        } else {
+          savedProfile = profData;
+        }
+
+        // 2. Upsert Seller Application (if not admin)
+        if (!isAdmin) {
+          const { data: existingApp } = await client
+            .from('seller_applications')
+            .select('id')
+            .eq('user_id', userId)
+            .maybeSingle();
+
+          if (existingApp?.id) {
+            const { data: updatedApp, error: appErr } = await client
+              .from('seller_applications')
+              .update({
+                full_name: cleanFullName,
+                email: email.trim(),
+                gcash_number: cleanGcash,
+                shop_name: cleanShop,
+                craft_category: cleanCategory,
+                portfolio_url: portfolioUrl?.trim() || '',
+                bio_or_experience: bio?.trim() || '',
+                status: 'pending',
+                applied_at: now
+              })
+              .eq('id', existingApp.id)
+              .select()
+              .maybeSingle();
+
+            if (!appErr) savedApplication = updatedApp;
+          } else {
+            const { data: newApp, error: appErr } = await client
+              .from('seller_applications')
+              .insert({
+                user_id: userId,
+                full_name: cleanFullName,
+                email: email.trim(),
+                gcash_number: cleanGcash,
+                shop_name: cleanShop,
+                craft_category: cleanCategory,
+                portfolio_url: portfolioUrl?.trim() || '',
+                bio_or_experience: bio?.trim() || '',
+                status: 'pending',
+                applied_at: now
+              })
+              .select()
+              .maybeSingle();
+
+            if (!appErr) savedApplication = newApp;
+          }
+        }
+
+        // 3. Update auth user metadata
+        try {
+          if (client.auth && client.auth.admin && typeof client.auth.admin.updateUserById === 'function') {
+            await client.auth.admin.updateUserById(userId, {
+              user_metadata: {
+                role: 'seller',
+                seller_status: targetStatus,
+                full_name: cleanFullName,
+                shop_name: cleanShop,
+                craft_category: cleanCategory
+              }
+            });
+          }
+        } catch (authErr) {
+          console.warn('Auth admin update metadata warning in server.ts:', authErr);
+        }
+      }
+
+      return res.json({
+        success: true,
+        status: targetStatus,
+        profile: savedProfile,
+        application: savedApplication
+      });
+    } catch (err: any) {
+      console.error('Error submitting twin access request:', err);
+      return res.status(500).json({ error: err.message || 'Failed to submit twin access request' });
+    }
+  });
+
   // User: Check verification & profile status safely
   app.get('/api/user/status', async (req, res) => {
     try {
-      const userId = req.query.userId as string;
-      if (!userId) {
-        return res.status(400).json({ error: 'userId is required' });
+      const userId = (req.query.userId || '') as string;
+      const userEmail = (req.query.email || '') as string;
+      if (!userId && !userEmail) {
+        return res.status(400).json({ error: 'userId or email is required' });
       }
 
       const client = getSupabaseServer();
@@ -95,9 +232,17 @@ async function startServer() {
         return res.json({ profile: null, application: null });
       }
 
+      let profileQuery = client.from('profiles').select('*');
+      if (userId) profileQuery = profileQuery.eq('id', userId);
+      else if (userEmail) profileQuery = profileQuery.ilike('email', userEmail);
+
+      let appQuery = client.from('seller_applications').select('*');
+      if (userId) appQuery = appQuery.eq('user_id', userId);
+      else if (userEmail) appQuery = appQuery.ilike('email', userEmail);
+
       const [{ data: profile }, { data: application }] = await Promise.all([
-        client.from('profiles').select('*').eq('id', userId).maybeSingle(),
-        client.from('seller_applications').select('*').eq('user_id', userId).maybeSingle()
+        profileQuery.maybeSingle(),
+        appQuery.order('applied_at', { ascending: false }).limit(1).maybeSingle()
       ]);
 
       return res.json({

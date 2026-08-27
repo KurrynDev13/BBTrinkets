@@ -40,8 +40,9 @@ export default async function handler(req: any, res: any) {
 
   try {
     const userId = (req.query?.userId || '') as string;
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
+    const userEmail = (req.query?.email || '') as string;
+    if (!userId && !userEmail) {
+      return res.status(400).json({ error: 'userId or email is required' });
     }
 
     const client = getSupabaseAdmin();
@@ -49,9 +50,17 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ profile: null, application: null });
     }
 
+    let profileQuery = client.from('profiles').select('*');
+    if (userId) profileQuery = profileQuery.eq('id', userId);
+    else if (userEmail) profileQuery = profileQuery.ilike('email', userEmail);
+
+    let appQuery = client.from('seller_applications').select('*');
+    if (userId) appQuery = appQuery.eq('user_id', userId);
+    else if (userEmail) appQuery = appQuery.ilike('email', userEmail);
+
     const [{ data: profile }, { data: application }] = await Promise.all([
-      client.from('profiles').select('*').eq('id', userId).maybeSingle(),
-      client.from('seller_applications').select('*').eq('user_id', userId).maybeSingle()
+      profileQuery.maybeSingle(),
+      appQuery.order('applied_at', { ascending: false }).limit(1).maybeSingle()
     ]);
 
     return res.status(200).json({ profile, application });

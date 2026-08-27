@@ -62,8 +62,25 @@ export default function Auth() {
         if (authData.user) {
           const userId = authData.user.id;
 
-          // 1. If Twin Seller and not admin, create seller approval request
+          // 1. If Twin Seller and not admin, create seller approval request via server API & client fallback
           if (role === 'seller' && !isAdmin) {
+            try {
+              await fetch('/api/user/request-twin-access', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  userId,
+                  email: email.trim(),
+                  fullName: fullName.trim(),
+                  gcash: contactGcash,
+                  shopName: 'B&B Twin Artists Studio',
+                  craftCategory: 'Pins & Artwork'
+                })
+              });
+            } catch (e) {
+              console.warn('Server application submission warning:', e);
+            }
+
             try {
               await supabase.from('seller_applications').insert({
                 user_id: userId,
@@ -75,7 +92,7 @@ export default function Auth() {
                 status: 'pending'
               });
             } catch (e) {
-              console.warn('Initial application creation will self-heal on login:', e);
+              console.warn('Initial application creation client fallback:', e);
             }
           }
 
