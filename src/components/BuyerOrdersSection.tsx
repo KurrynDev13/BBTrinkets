@@ -241,122 +241,137 @@ export default function BuyerOrdersSection({
 
       {/* Category Navigation Tabs */}
       <div className="bg-white rounded-2xl p-2 shadow-sm border border-bb-navy/10">
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
+        <div className="flex items-start md:items-center justify-between gap-1 md:gap-1.5 pb-1 sm:pb-0">
           <button
             onClick={() => setActiveTab('all')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
+            className={`flex-1 px-1 md:px-4 py-2 md:py-2.5 rounded-lg md:rounded-xl text-[10px] sm:text-[11px] md:text-sm font-semibold transition-all flex flex-col md:flex-row items-center justify-start md:justify-center gap-1 md:gap-2 text-center md:whitespace-nowrap cursor-pointer ${
               activeTab === 'all'
                 ? 'bg-bb-navy text-white shadow-sm'
                 : 'text-bb-navy/70 hover:bg-bb-cream hover:text-bb-navy'
             }`}
           >
-            <span>All Orders</span>
-            <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
-              activeTab === 'all' ? 'bg-white/20 text-white' : 'bg-bb-navy/10 text-bb-navy/70'
-            }`}>
-              {tabCounts.all}
-            </span>
+            <div className="relative flex items-center justify-center">
+              <Layers size={14} className="w-4 h-4 md:hidden" />
+              <span className={`absolute -top-1.5 -right-2 md:relative md:top-auto md:right-auto text-[8px] md:text-[11px] px-1 md:px-1.5 py-0.5 md:py-0.2 rounded-full font-bold ${
+                activeTab === 'all' ? 'bg-white/20 text-white' : 'bg-bb-navy/10 text-bb-navy/70'
+              }`}>
+                {tabCounts.all}
+              </span>
+            </div>
+            <span className="leading-tight md:leading-normal">All<br className="md:hidden" /> Orders</span>
           </button>
 
           <button
             onClick={() => setActiveTab('to-pay')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
+            className={`flex-1 px-1 md:px-4 py-2 md:py-2.5 rounded-lg md:rounded-xl text-[10px] sm:text-[11px] md:text-sm font-semibold transition-all flex flex-col md:flex-row items-center justify-start md:justify-center gap-1 md:gap-2 text-center md:whitespace-nowrap cursor-pointer ${
               activeTab === 'to-pay'
                 ? 'bg-amber-600 text-white shadow-sm'
                 : 'text-bb-navy/70 hover:bg-amber-50 hover:text-amber-900'
             }`}
           >
-            <CreditCard size={15} />
-            <span>To Pay</span>
-            {tabCounts['to-pay'] > 0 && (
-              <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
-                activeTab === 'to-pay' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
-              }`}>
-                {tabCounts['to-pay']}
-              </span>
-            )}
+            <div className="relative flex items-center justify-center">
+              <CreditCard size={15} className="w-4 h-4 md:w-[15px] md:h-[15px]" />
+              {tabCounts['to-pay'] > 0 && (
+                <span className={`absolute -top-1.5 -right-2 md:relative md:top-auto md:right-auto text-[8px] md:text-[11px] px-1 md:px-1.5 py-0.5 md:py-0.2 rounded-full font-bold ${
+                  activeTab === 'to-pay' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {tabCounts['to-pay']}
+                </span>
+              )}
+            </div>
+            <span className="leading-tight md:leading-normal">To<br className="md:hidden" /> Pay</span>
           </button>
 
           <button
             onClick={() => setActiveTab('to-ship')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
+            className={`flex-1 px-1 md:px-4 py-2 md:py-2.5 rounded-lg md:rounded-xl text-[10px] sm:text-[11px] md:text-sm font-semibold transition-all flex flex-col md:flex-row items-center justify-start md:justify-center gap-1 md:gap-2 text-center md:whitespace-nowrap cursor-pointer ${
               activeTab === 'to-ship'
                 ? 'bg-bb-teal text-white shadow-sm'
                 : 'text-bb-navy/70 hover:bg-teal-50 hover:text-teal-900'
             }`}
           >
-            <Package size={15} />
-            <span>To Ship</span>
-            {tabCounts['to-ship'] > 0 && (
-              <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
-                activeTab === 'to-ship' ? 'bg-white/20 text-white' : 'bg-teal-100 text-teal-800'
-              }`}>
-                {tabCounts['to-ship']}
-              </span>
-            )}
+            <div className="relative flex items-center justify-center">
+              <Package size={15} className="w-4 h-4 md:w-[15px] md:h-[15px]" />
+              {tabCounts['to-ship'] > 0 && (
+                <span className={`absolute -top-1.5 -right-2 md:relative md:top-auto md:right-auto text-[8px] md:text-[11px] px-1 md:px-1.5 py-0.5 md:py-0.2 rounded-full font-bold ${
+                  activeTab === 'to-ship' ? 'bg-white/20 text-white' : 'bg-teal-100 text-teal-800'
+                }`}>
+                  {tabCounts['to-ship']}
+                </span>
+              )}
+            </div>
+            <span className="leading-tight md:leading-normal">To<br className="md:hidden" /> Ship</span>
           </button>
 
           <button
             onClick={() => setActiveTab('to-receive')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
+            className={`flex-1 px-1 md:px-4 py-2 md:py-2.5 rounded-lg md:rounded-xl text-[10px] sm:text-[11px] md:text-sm font-semibold transition-all flex flex-col md:flex-row items-center justify-start md:justify-center gap-1 md:gap-2 text-center md:whitespace-nowrap cursor-pointer ${
               activeTab === 'to-receive'
                 ? 'bg-purple-600 text-white shadow-sm'
                 : 'text-bb-navy/70 hover:bg-purple-50 hover:text-purple-900'
             }`}
           >
-            <Truck size={15} />
-            <span>To Receive</span>
-            {tabCounts['to-receive'] > 0 && (
-              <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
-                activeTab === 'to-receive' ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-800'
-              }`}>
-                {tabCounts['to-receive']}
-              </span>
-            )}
+            <div className="relative flex items-center justify-center">
+              <Truck size={15} className="w-4 h-4 md:w-[15px] md:h-[15px]" />
+              {tabCounts['to-receive'] > 0 && (
+                <span className={`absolute -top-1.5 -right-2 md:relative md:top-auto md:right-auto text-[8px] md:text-[11px] px-1 md:px-1.5 py-0.5 md:py-0.2 rounded-full font-bold ${
+                  activeTab === 'to-receive' ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-800'
+                }`}>
+                  {tabCounts['to-receive']}
+                </span>
+              )}
+            </div>
+            <span className="leading-tight md:leading-normal">To<br className="md:hidden" /> Receive</span>
           </button>
 
           <button
             onClick={() => setActiveTab('to-review')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
+            className={`flex-1 px-1 md:px-4 py-2 md:py-2.5 rounded-lg md:rounded-xl text-[10px] sm:text-[11px] md:text-sm font-semibold transition-all flex flex-col md:flex-row items-center justify-start md:justify-center gap-1 md:gap-2 text-center md:whitespace-nowrap cursor-pointer ${
               activeTab === 'to-review'
                 ? 'bg-amber-500 text-white shadow-sm'
                 : 'text-bb-navy/70 hover:bg-amber-50 hover:text-amber-900'
             }`}
           >
-            <Star size={15} />
-            <span>To Review</span>
-            {tabCounts['to-review'] > 0 && (
-              <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
-                activeTab === 'to-review' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
-              }`}>
-                {tabCounts['to-review']}
-              </span>
-            )}
+            <div className="relative flex items-center justify-center">
+              <Star size={15} className="w-4 h-4 md:w-[15px] md:h-[15px]" />
+              {tabCounts['to-review'] > 0 && (
+                <span className={`absolute -top-1.5 -right-2 md:relative md:top-auto md:right-auto text-[8px] md:text-[11px] px-1 md:px-1.5 py-0.5 md:py-0.2 rounded-full font-bold ${
+                  activeTab === 'to-review' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {tabCounts['to-review']}
+                </span>
+              )}
+            </div>
+            <span className="leading-tight md:leading-normal">To<br className="md:hidden" /> Review</span>
           </button>
 
           <button
             onClick={() => setActiveTab('completed')}
-            className={`px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`flex-1 px-1 md:px-4 py-2 md:py-2.5 rounded-lg md:rounded-xl text-[10px] sm:text-[11px] md:text-sm font-semibold transition-all flex flex-col md:flex-row items-center justify-start md:justify-center gap-1 md:gap-2 text-center md:whitespace-nowrap cursor-pointer ${
               activeTab === 'completed'
                 ? 'bg-emerald-600 text-white shadow-sm'
                 : 'text-bb-navy/70 hover:bg-emerald-50 hover:text-emerald-900'
             }`}
           >
-            <CheckCircle2 size={14} />
-            <span>Completed</span>
+            <div className="relative flex items-center justify-center">
+              <CheckCircle2 size={14} className="w-4 h-4 md:w-[14px] md:h-[14px]" />
+            </div>
+            <span className="leading-tight md:leading-normal">Done</span>
           </button>
 
           {tabCounts.cancelled > 0 && (
             <button
               onClick={() => setActiveTab('cancelled')}
-              className={`px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`flex-1 px-1 md:px-4 py-2 md:py-2.5 rounded-lg md:rounded-xl text-[10px] sm:text-[11px] md:text-sm font-semibold transition-all flex flex-col md:flex-row items-center justify-start md:justify-center gap-1 md:gap-2 text-center md:whitespace-nowrap cursor-pointer ${
                 activeTab === 'cancelled'
                   ? 'bg-gray-600 text-white shadow-sm'
                   : 'text-bb-navy/70 hover:bg-gray-100 hover:text-gray-900'
               }`}
             >
-              <XCircle size={14} />
-              <span>Cancelled ({tabCounts.cancelled})</span>
+              <div className="relative flex items-center justify-center">
+                <XCircle size={14} className="w-4 h-4 md:w-[14px] md:h-[14px]" />
+              </div>
+              <span className="leading-tight md:leading-normal">Cancel<br className="md:hidden" /> ({tabCounts.cancelled})</span>
             </button>
           )}
         </div>

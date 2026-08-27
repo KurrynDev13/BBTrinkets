@@ -178,71 +178,82 @@ export default function SellerOrdersSection({
 
       {/* Seller Pipeline Tabs */}
       <div className="bg-white rounded-2xl p-2 shadow-sm border border-bb-navy/10">
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
+        <div className="flex items-start md:items-center justify-between gap-1 md:gap-1.5 pb-1 sm:pb-0">
           <button
             onClick={() => setActiveTab('needs-prep')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
+            className={`flex-1 px-1 md:px-4 py-2 md:py-2.5 rounded-lg md:rounded-xl text-[10px] sm:text-xs md:text-sm font-semibold transition-all flex flex-col md:flex-row items-center justify-start md:justify-center gap-1 md:gap-2 text-center md:whitespace-nowrap cursor-pointer ${
               activeTab === 'needs-prep'
                 ? 'bg-bb-teal text-white shadow-sm'
                 : 'text-bb-navy/70 hover:bg-teal-50 hover:text-teal-900'
             }`}
           >
-            <Sparkles size={15} />
-            <span>To Ship (Needs Prep)</span>
-            {tabCounts['needs-prep'] > 0 && (
-              <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
-                activeTab === 'needs-prep' ? 'bg-white text-teal-800' : 'bg-teal-600 text-white animate-pulse'
-              }`}>
-                {tabCounts['needs-prep']}
-              </span>
-            )}
+            <div className="relative flex items-center justify-center">
+              <Sparkles size={15} className="w-4 h-4 md:w-[15px] md:h-[15px]" />
+              {tabCounts['needs-prep'] > 0 && (
+                <span className={`absolute -top-1.5 -right-2 md:relative md:top-auto md:right-auto text-[9px] md:text-[11px] px-1 md:px-2 py-0.5 rounded-full font-bold ${
+                  activeTab === 'needs-prep' ? 'bg-white text-teal-800' : 'bg-teal-600 text-white animate-pulse'
+                }`}>
+                  {tabCounts['needs-prep']}
+                </span>
+              )}
+            </div>
+            <span className="leading-tight md:leading-normal">To Ship<br className="md:hidden" /> (Needs Prep)</span>
           </button>
 
           <button
             onClick={() => setActiveTab('shipped')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
+            className={`flex-1 px-1 md:px-4 py-2 md:py-2.5 rounded-lg md:rounded-xl text-[10px] sm:text-xs md:text-sm font-semibold transition-all flex flex-col md:flex-row items-center justify-start md:justify-center gap-1 md:gap-2 text-center md:whitespace-nowrap cursor-pointer ${
               activeTab === 'shipped'
                 ? 'bg-purple-600 text-white shadow-sm'
                 : 'text-bb-navy/70 hover:bg-purple-50 hover:text-purple-900'
             }`}
           >
-            <Truck size={15} />
-            <span>In Transit ({tabCounts.shipped})</span>
+            <div className="relative flex items-center justify-center">
+              <Truck size={15} className="w-4 h-4 md:w-[15px] md:h-[15px]" />
+            </div>
+            <span className="leading-tight md:leading-normal">In Transit<br className="md:hidden" /> ({tabCounts.shipped})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('completed')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
+            className={`flex-1 px-1 md:px-4 py-2 md:py-2.5 rounded-lg md:rounded-xl text-[10px] sm:text-xs md:text-sm font-semibold transition-all flex flex-col md:flex-row items-center justify-start md:justify-center gap-1 md:gap-2 text-center md:whitespace-nowrap cursor-pointer ${
               activeTab === 'completed'
                 ? 'bg-emerald-600 text-white shadow-sm'
                 : 'text-bb-navy/70 hover:bg-emerald-50 hover:text-emerald-900'
             }`}
           >
-            <CheckCircle2 size={15} />
-            <span>Delivered & Completed ({tabCounts.completed})</span>
+            <div className="relative flex items-center justify-center">
+              <CheckCircle2 size={15} className="w-4 h-4 md:w-[15px] md:h-[15px]" />
+            </div>
+            <span className="leading-tight md:leading-normal">Delivered<br className="md:hidden" /> & Completed ({tabCounts.completed})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('pending')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
+            className={`flex-1 px-1 md:px-4 py-2 md:py-2.5 rounded-lg md:rounded-xl text-[10px] sm:text-xs md:text-sm font-semibold transition-all flex flex-col md:flex-row items-center justify-start md:justify-center gap-1 md:gap-2 text-center md:whitespace-nowrap cursor-pointer ${
               activeTab === 'pending'
                 ? 'bg-amber-600 text-white shadow-sm'
                 : 'text-bb-navy/70 hover:bg-amber-50 hover:text-amber-900'
             }`}
           >
-            <Clock size={15} />
-            <span>Pending Payment ({tabCounts.pending})</span>
+            <div className="relative flex items-center justify-center">
+              <Clock size={15} className="w-4 h-4 md:w-[15px] md:h-[15px]" />
+            </div>
+            <span className="leading-tight md:leading-normal">Pending<br className="md:hidden" /> Payment ({tabCounts.pending})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('all')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
+            className={`flex-1 px-1 md:px-4 py-2 md:py-2.5 rounded-lg md:rounded-xl text-[10px] sm:text-xs md:text-sm font-semibold transition-all flex flex-col md:flex-row items-center justify-start md:justify-center gap-1 md:gap-2 text-center md:whitespace-nowrap cursor-pointer ${
               activeTab === 'all'
                 ? 'bg-bb-navy text-white shadow-sm'
                 : 'text-bb-navy/70 hover:bg-bb-cream hover:text-bb-navy'
             }`}
           >
-            <span>All Orders ({tabCounts.all})</span>
+            <div className="relative flex items-center justify-center">
+              <Layers size={15} className="w-4 h-4 md:w-[15px] md:h-[15px] md:hidden" />
+            </div>
+            <span className="leading-tight md:leading-normal">All<br className="md:hidden" /> Orders ({tabCounts.all})</span>
           </button>
         </div>
       </div>

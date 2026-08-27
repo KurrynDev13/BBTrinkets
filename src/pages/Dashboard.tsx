@@ -1264,116 +1264,120 @@ export default function Dashboard() {
             /* VERIFIED SELLER / ADMIN SELLER DASHBOARD */
             <div className="space-y-8">
               {/* Top Quick Metrics */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-white p-5 rounded-2xl border border-bb-navy/10 shadow-sm flex items-center gap-4">
-                  <div className="w-12 h-12 bg-teal-50 text-teal-700 rounded-2xl flex items-center justify-center shrink-0">
-                    <DollarSign size={24} />
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+                <div className="bg-white p-3 sm:p-5 rounded-xl sm:rounded-2xl border border-bb-navy/10 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-teal-50 text-teal-700 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0">
+                    <DollarSign size={24} className="w-5 h-5 sm:w-6 sm:h-6" />
                   </div>
-                  <div>
-                    <span className="text-[11px] font-bold text-bb-navy/60 uppercase tracking-wider block">Total Sales</span>
-                    <span className="font-serif font-bold text-xl sm:text-2xl text-bb-navy">
+                  <div className="min-w-0 break-words w-full">
+                    <span className="text-[9px] sm:text-[11px] font-bold text-bb-navy/60 uppercase tracking-wider block leading-tight mb-1 sm:mb-0">Total Sales</span>
+                    <span className="font-serif font-bold text-base sm:text-xl lg:text-2xl text-bb-navy block truncate">
                       ₱{sellerStats.totalSales.toFixed(2)}
                     </span>
                   </div>
                 </div>
 
-                <div className="bg-white p-5 rounded-2xl border border-bb-navy/10 shadow-sm flex items-center gap-4">
-                  <div className="w-12 h-12 bg-amber-50 text-amber-700 rounded-2xl flex items-center justify-center shrink-0">
-                    <PackageCheck size={24} />
+                <div className="bg-white p-3 sm:p-5 rounded-xl sm:rounded-2xl border border-bb-navy/10 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-amber-50 text-amber-700 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0">
+                    <PackageCheck size={24} className="w-5 h-5 sm:w-6 sm:h-6" />
                   </div>
-                  <div>
-                    <span className="text-[11px] font-bold text-bb-navy/60 uppercase tracking-wider block">To Ship / Prep</span>
-                    <span className="font-serif font-bold text-xl sm:text-2xl text-amber-700">
-                      {sellerStats.pendingPrep} orders
+                  <div className="min-w-0 break-words w-full">
+                    <span className="text-[9px] sm:text-[11px] font-bold text-bb-navy/60 uppercase tracking-wider block leading-tight mb-1 sm:mb-0">To Ship/Prep</span>
+                    <span className="font-serif font-bold text-base sm:text-xl lg:text-2xl text-amber-700 block truncate flex items-baseline gap-1">
+                      {sellerStats.pendingPrep} <span className="text-[10px] sm:text-sm font-sans font-medium uppercase tracking-wider">orders</span>
                     </span>
                   </div>
                 </div>
 
-                <div className="bg-white p-5 rounded-2xl border border-bb-navy/10 shadow-sm flex items-center gap-4">
-                  <div className="w-12 h-12 bg-purple-50 text-purple-700 rounded-2xl flex items-center justify-center shrink-0">
-                    <Truck size={24} />
+                <div className="bg-white p-3 sm:p-5 rounded-xl sm:rounded-2xl border border-bb-navy/10 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-50 text-purple-700 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0">
+                    <Truck size={24} className="w-5 h-5 sm:w-6 sm:h-6" />
                   </div>
-                  <div>
-                    <span className="text-[11px] font-bold text-bb-navy/60 uppercase tracking-wider block">In Transit</span>
-                    <span className="font-serif font-bold text-xl sm:text-2xl text-purple-700">
-                      {sellerStats.inTransit} packages
+                  <div className="min-w-0 break-words w-full">
+                    <span className="text-[9px] sm:text-[11px] font-bold text-bb-navy/60 uppercase tracking-wider block leading-tight mb-1 sm:mb-0">In Transit</span>
+                    <span className="font-serif font-bold text-base sm:text-xl lg:text-2xl text-purple-700 block truncate flex items-baseline gap-1">
+                      {sellerStats.inTransit} <span className="text-[10px] sm:text-sm font-sans font-medium uppercase tracking-wider">pkgs</span>
                     </span>
                   </div>
                 </div>
 
-                <div className="bg-white p-5 rounded-2xl border border-bb-navy/10 shadow-sm flex items-center gap-4">
-                  <div className="w-12 h-12 bg-amber-50 text-bb-gold rounded-2xl flex items-center justify-center shrink-0">
-                    <Star size={24} className="fill-bb-gold" />
+                <div className="bg-white p-3 sm:p-5 rounded-xl sm:rounded-2xl border border-bb-navy/10 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-amber-50 text-bb-gold rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0">
+                    <Star size={24} className="w-5 h-5 sm:w-6 sm:h-6 fill-bb-gold" />
                   </div>
-                  <div>
-                    <span className="text-[11px] font-bold text-bb-navy/60 uppercase tracking-wider block">Store Rating</span>
-                    <span className="font-serif font-bold text-xl sm:text-2xl text-bb-navy">
-                      {sellerStats.avgRating} ⭐ ({sellerStats.totalReviews})
+                  <div className="min-w-0 break-words w-full">
+                    <span className="text-[9px] sm:text-[11px] font-bold text-bb-navy/60 uppercase tracking-wider block leading-tight mb-1 sm:mb-0">Store Rating</span>
+                    <span className="font-serif font-bold text-base sm:text-xl lg:text-2xl text-bb-navy block truncate flex items-center gap-1">
+                      {sellerStats.avgRating} <Star size={12} className="fill-current text-bb-gold sm:w-[16px] sm:h-[16px]" /> <span className="text-xs sm:text-lg font-sans font-medium text-bb-navy/60">({sellerStats.totalReviews})</span>
                     </span>
                   </div>
                 </div>
               </div>
 
               {/* Seller Navigation Sub-Tabs */}
-              <div className="flex border-b border-bb-navy/10 gap-3 sm:gap-6 overflow-x-auto pb-1 scrollbar-none">
+              <div className="flex border-b border-bb-navy/10 justify-between md:justify-start gap-1 sm:gap-6 overflow-x-auto pb-1 scrollbar-none">
                 <button
                   onClick={() => setSellerViewTab('fulfillment')}
-                  className={`pb-3 font-serif font-bold text-base sm:text-lg transition-all flex items-center gap-2 border-b-2 whitespace-nowrap ${
+                  className={`flex-1 md:flex-none pb-2 md:pb-3 font-serif font-bold text-[10px] sm:text-xs md:text-lg transition-all flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-2 border-b-2 text-center md:whitespace-nowrap px-0.5 md:px-0 ${
                     sellerViewTab === 'fulfillment'
                       ? 'border-bb-teal text-bb-teal'
                       : 'border-transparent text-bb-navy/60 hover:text-bb-navy'
                   }`}
                 >
-                  <PackageCheck size={18} />
-                  <span>Orders & Fulfillment</span>
-                  {sellerStats.pendingPrep > 0 && (
-                    <span className="bg-teal-600 text-white text-xs px-2 py-0.5 rounded-full font-sans font-bold">
-                      {sellerStats.pendingPrep}
-                    </span>
-                  )}
+                  <div className="relative flex items-center justify-center">
+                    <PackageCheck size={18} className="w-5 h-5 md:w-[18px] md:h-[18px]" />
+                    {sellerStats.pendingPrep > 0 && (
+                      <span className="absolute -top-2 -right-3 md:relative md:top-auto md:right-auto bg-teal-600 text-white text-[9px] md:text-xs px-1.5 md:px-2 py-0.5 rounded-full font-sans font-bold">
+                        {sellerStats.pendingPrep}
+                      </span>
+                    )}
+                  </div>
+                  <span className="leading-tight md:leading-normal">Orders &<br className="md:hidden" /> Fulfillment</span>
                 </button>
 
                 <button
                   onClick={() => setSellerViewTab('catalog')}
-                  className={`pb-3 font-serif font-bold text-base sm:text-lg transition-all flex items-center gap-2 border-b-2 whitespace-nowrap ${
+                  className={`flex-1 md:flex-none pb-2 md:pb-3 font-serif font-bold text-[10px] sm:text-xs md:text-lg transition-all flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-2 border-b-2 text-center md:whitespace-nowrap px-0.5 md:px-0 ${
                     sellerViewTab === 'catalog'
                       ? 'border-bb-teal text-bb-teal'
                       : 'border-transparent text-bb-navy/60 hover:text-bb-navy'
                   }`}
                 >
-                  <Palette size={18} />
-                  <span>Art & Product Catalog ({products.length})</span>
+                  <Palette size={18} className="w-5 h-5 md:w-[18px] md:h-[18px]" />
+                  <span className="leading-tight md:leading-normal">Art & Product<br className="md:hidden" /> Catalog ({products.length})</span>
                 </button>
 
                 <button
                   onClick={() => setSellerViewTab('reviews')}
-                  className={`pb-3 font-serif font-bold text-base sm:text-lg transition-all flex items-center gap-2 border-b-2 whitespace-nowrap ${
+                  className={`flex-1 md:flex-none pb-2 md:pb-3 font-serif font-bold text-[10px] sm:text-xs md:text-lg transition-all flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-2 border-b-2 text-center md:whitespace-nowrap px-0.5 md:px-0 ${
                     sellerViewTab === 'reviews'
                       ? 'border-bb-teal text-bb-teal'
                       : 'border-transparent text-bb-navy/60 hover:text-bb-navy'
                   }`}
                 >
-                  <Star size={18} />
-                  <span>Reviews & Feedback ({reviews.length})</span>
+                  <Star size={18} className="w-5 h-5 md:w-[18px] md:h-[18px]" />
+                  <span className="leading-tight md:leading-normal">Reviews &<br className="md:hidden" /> Feedback ({reviews.length})</span>
                 </button>
 
                 {/* Admin Tab: Seller Verification Applications */}
                 {profile.is_admin && (
                   <button
                     onClick={() => setSellerViewTab('applications')}
-                    className={`pb-3 font-serif font-bold text-base sm:text-lg transition-all flex items-center gap-2 border-b-2 whitespace-nowrap ${
+                    className={`flex-1 md:flex-none pb-2 md:pb-3 font-serif font-bold text-[10px] sm:text-xs md:text-lg transition-all flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-2 border-b-2 text-center md:whitespace-nowrap px-0.5 md:px-0 ${
                       sellerViewTab === 'applications'
                         ? 'border-amber-500 text-amber-800'
                         : 'border-transparent text-bb-navy/60 hover:text-amber-800'
                     }`}
                   >
-                    <ShieldCheck size={18} className="text-amber-600" />
-                    <span>Seller Applications</span>
-                    {pendingAppsCount > 0 && (
-                      <span className="bg-amber-500 text-white text-xs px-2 py-0.5 rounded-full font-sans font-bold animate-pulse">
-                        {pendingAppsCount} pending
-                      </span>
-                    )}
+                    <div className="relative flex items-center justify-center">
+                      <ShieldCheck size={18} className="text-amber-600 w-5 h-5 md:w-[18px] md:h-[18px]" />
+                      {pendingAppsCount > 0 && (
+                        <span className="absolute -top-2 -right-3 md:relative md:top-auto md:right-auto bg-amber-500 text-white text-[9px] md:text-xs px-1.5 md:px-2 py-0.5 rounded-full font-sans font-bold animate-pulse">
+                          {pendingAppsCount}
+                        </span>
+                      )}
+                    </div>
+                    <span className="leading-tight md:leading-normal">Seller<br className="md:hidden" /> Applications</span>
                   </button>
                 )}
               </div>

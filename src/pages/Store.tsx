@@ -649,10 +649,10 @@ export default function Store() {
       </div>
 
       {/* Filters & Search Bar */}
-      <div className="bg-white p-5 rounded-3xl shadow-sm border border-bb-navy/10 mb-8 space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="bg-white p-3 sm:p-5 rounded-2xl sm:rounded-3xl shadow-sm border border-bb-navy/10 mb-6 sm:mb-8 space-y-3 sm:space-y-4 overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
           {/* Category Tabs */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0 scrollbar-none">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 lg:pb-0 scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0">
             {categories.map(cat => {
               const count = cat === 'All' 
                 ? allProducts.length 
@@ -663,14 +663,14 @@ export default function Store() {
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`px-5 py-2.5 rounded-full font-medium text-sm whitespace-nowrap transition-all flex items-center gap-2 ${
+                  className={`shrink-0 px-3 sm:px-5 py-1.5 sm:py-2.5 rounded-full font-medium text-[11px] sm:text-sm transition-all flex items-center gap-1.5 sm:gap-2 ${
                     isSelected
                       ? 'bg-bb-navy text-white shadow-sm'
                       : 'bg-bb-cream/60 border border-bb-navy/10 text-bb-navy hover:bg-bb-cream hover:border-bb-navy/30'
                   }`}
                 >
                   <span>{cat}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                  <span className={`text-[9px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-bold ${
                     isSelected ? 'bg-white/20 text-white' : 'bg-bb-navy/10 text-bb-navy/70'
                   }`}>
                     {count}
@@ -681,64 +681,64 @@ export default function Store() {
           </div>
 
           {/* Search Input */}
-          <div className="relative min-w-[260px]">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-bb-navy/40" size={18} />
+          <div className="relative w-full lg:w-auto lg:min-w-[260px]">
+            <Search className="absolute left-3 sm:left-3.5 top-1/2 -translate-y-1/2 text-bb-navy/40 w-4 h-4 sm:w-[18px] sm:h-[18px]" />
             <input
               type="text"
-              placeholder="Search items, prints, pins..."
+              placeholder="Search items, prints..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-8 py-2.5 rounded-full border border-bb-navy/15 bg-bb-cream/30 text-sm text-bb-navy focus:outline-none focus:ring-2 focus:ring-bb-teal focus:bg-white transition-all"
+              className="w-full pl-9 sm:pl-10 pr-8 py-2 sm:py-2.5 rounded-xl sm:rounded-full border border-bb-navy/15 bg-bb-cream/30 text-xs sm:text-sm text-bb-navy focus:outline-none focus:ring-2 focus:ring-bb-teal focus:bg-white transition-all"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-bb-navy/40 hover:text-bb-navy"
               >
-                <X size={14} />
+                <X size={14} className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
               </button>
             )}
           </div>
         </div>
 
         {/* Secondary Filters (Sorting & Quick Price Filter) */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-bb-navy/5 text-xs sm:text-sm">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-bb-navy/50 font-medium flex items-center gap-1">
-              <SlidersHorizontal size={14} /> Price Filter:
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-bb-navy/5 text-xs sm:text-sm">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0">
+            <span className="shrink-0 text-bb-navy/50 font-medium flex items-center gap-1 text-[10px] sm:text-xs">
+              <SlidersHorizontal size={12} className="sm:w-[14px] sm:h-[14px]" /> <span className="hidden sm:inline">Price:</span>
             </span>
             <button
               onClick={() => setPriceFilter('all')}
-              className={`px-3 py-1 rounded-lg transition-colors ${
-                priceFilter === 'all' ? 'bg-bb-navy/10 text-bb-navy font-bold' : 'text-bb-navy/60 hover:text-bb-navy'
+              className={`shrink-0 px-2.5 sm:px-3 py-1 rounded-md sm:rounded-lg transition-colors text-[10px] sm:text-xs ${
+                priceFilter === 'all' ? 'bg-bb-navy/10 text-bb-navy font-bold' : 'text-bb-navy/60 hover:text-bb-navy bg-bb-navy/5 sm:bg-transparent'
               }`}
             >
-              All Prices
+              All
             </button>
             <button
               onClick={() => setPriceFilter('under50')}
-              className={`px-3 py-1 rounded-lg transition-colors ${
-                priceFilter === 'under50' ? 'bg-bb-navy/10 text-bb-navy font-bold' : 'text-bb-navy/60 hover:text-bb-navy'
+              className={`shrink-0 px-2.5 sm:px-3 py-1 rounded-md sm:rounded-lg transition-colors text-[10px] sm:text-xs ${
+                priceFilter === 'under50' ? 'bg-bb-navy/10 text-bb-navy font-bold' : 'text-bb-navy/60 hover:text-bb-navy bg-bb-navy/5 sm:bg-transparent'
               }`}
             >
-              Under ₱50 (Pins, Chains & Stickers)
+              Under ₱50 <span className="hidden lg:inline">(Pins, Chains & Stickers)</span>
             </button>
             <button
               onClick={() => setPriceFilter('200plus')}
-              className={`px-3 py-1 rounded-lg transition-colors ${
-                priceFilter === '200plus' ? 'bg-bb-navy/10 text-bb-navy font-bold' : 'text-bb-navy/60 hover:text-bb-navy'
+              className={`shrink-0 px-2.5 sm:px-3 py-1 rounded-md sm:rounded-lg transition-colors text-[10px] sm:text-xs ${
+                priceFilter === '200plus' ? 'bg-bb-navy/10 text-bb-navy font-bold' : 'text-bb-navy/60 hover:text-bb-navy bg-bb-navy/5 sm:bg-transparent'
               }`}
             >
-              ₱200 - ₱500 (Fine Art Prints)
+              ₱200 - ₱500 <span className="hidden lg:inline">(Fine Art Prints)</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-2 ml-auto">
-            <span className="text-bb-navy/50 font-medium">Sort by:</span>
+          <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto pt-2 sm:pt-0 border-t border-bb-navy/5 sm:border-none">
+            <span className="text-bb-navy/50 font-medium text-[10px] sm:text-xs">Sort by:</span>
             <select
               value={sortBy}
               onChange={e => setSortBy(e.target.value as any)}
-              className="bg-bb-cream/50 border border-bb-navy/15 rounded-lg px-3 py-1 text-xs text-bb-navy font-medium focus:outline-none focus:ring-1 focus:ring-bb-teal"
+              className="bg-bb-cream/50 border border-bb-navy/15 rounded-md sm:rounded-lg px-2 sm:px-3 py-1 text-[10px] sm:text-xs text-bb-navy font-medium focus:outline-none focus:ring-1 focus:ring-bb-teal flex-1 sm:flex-none"
             >
               <option value="featured">Featured Picks</option>
               <option value="price-asc">Price: Low to High</option>
