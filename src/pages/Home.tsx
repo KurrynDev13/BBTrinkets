@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { ArrowRight, Star, ShoppingBag, Brush, Sparkles, Heart, ShieldCheck, Palette, Package } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { Product } from '../types';
@@ -35,8 +36,16 @@ export default function Home() {
   const featuredStickers = products.filter(p => p.category === 'Stickers');
 
   return (
-    <div className="flex flex-col min-h-screen">
-      {/* Hero Section */}
+    <>
+      <Helmet>
+        <title>B&B Trinkets | Independent Art, Pins & Prints</title>
+        <meta name="description" content="Shop handcrafted pins, exclusive art prints, and unique pocket art from independent artists at B&B Trinkets." />
+        <meta property="og:title" content="B&B Trinkets | Independent Art, Pins & Prints" />
+        <meta property="og:description" content="Shop handcrafted pins, exclusive art prints, and unique pocket art from independent artists at B&B Trinkets." />
+        <link rel="canonical" href="https://ais-pre-fhcnh67djbrp5xiwpa7v7c-423522107291.asia-east1.run.app/" />
+      </Helmet>
+      <div className="flex flex-col min-h-screen">
+        {/* Hero Section */}
       <section className="relative bg-bb-cream py-20 lg:py-28 overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
@@ -340,5 +349,6 @@ export default function Home() {
         </div>
       </section>
     </div>
+    </>
   );
 }

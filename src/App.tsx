@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
+import { Helmet } from 'react-helmet-async';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Home from './pages/Home';
@@ -10,20 +11,32 @@ import VoiceflowWidget from './components/VoiceflowWidget';
 
 // Simple placeholder components for other routes
 const About = () => (
-  <div className="max-w-4xl mx-auto px-4 py-24 text-center">
-    <h1 className="text-4xl font-serif font-bold text-bb-navy mb-6">About B&B Trinkets</h1>
-    <p className="text-bb-navy/70 text-lg leading-relaxed">
-      Founded on the principle of bringing unique, independent art to a wider audience. 
-      We curate high-quality pins, keychains, prints, and artworks.
-    </p>
-  </div>
+  <>
+    <Helmet>
+      <title>About Us | B&B Trinkets</title>
+      <meta name="description" content="Learn about B&B Trinkets and our mission to bring unique, independent art to a wider audience through high-quality pins, prints, and artworks." />
+    </Helmet>
+    <div className="max-w-4xl mx-auto px-4 py-24 text-center">
+      <h1 className="text-4xl font-serif font-bold text-bb-navy mb-6">About B&B Trinkets</h1>
+      <p className="text-bb-navy/70 text-lg leading-relaxed">
+        Founded on the principle of bringing unique, independent art to a wider audience. 
+        We curate high-quality pins, keychains, prints, and artworks.
+      </p>
+    </div>
+  </>
 );
 
 const Contact = () => (
-  <div className="max-w-4xl mx-auto px-4 py-24 text-center">
-    <h1 className="text-4xl font-serif font-bold text-bb-navy mb-6">Contact Us</h1>
-    <p className="text-bb-navy/70 text-lg">Have a question? Use our AI chatbot on the bottom right to get immediate assistance, or email us at support@bbtrinkets.com.</p>
-  </div>
+  <>
+    <Helmet>
+      <title>Contact Us | B&B Trinkets</title>
+      <meta name="description" content="Get in touch with B&B Trinkets. Contact our support team or use our AI chatbot for immediate assistance." />
+    </Helmet>
+    <div className="max-w-4xl mx-auto px-4 py-24 text-center">
+      <h1 className="text-4xl font-serif font-bold text-bb-navy mb-6">Contact Us</h1>
+      <p className="text-bb-navy/70 text-lg">Have a question? Use our AI chatbot on the bottom right to get immediate assistance, or email us at support@bbtrinkets.com.</p>
+    </div>
+  </>
 );
 
 function ScrollToTop() {

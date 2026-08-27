@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, type FormEvent } from 'react';
+import { Helmet } from 'react-helmet-async';
 import { supabase } from '../lib/supabase';
 import type { Product, Review, ProductCategory } from '../types';
 import { 
@@ -605,7 +606,15 @@ export default function Store() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <>
+      <Helmet>
+        <title>Store | B&B Trinkets</title>
+        <meta name="description" content="Browse our official shop catalog of artisan trinkets, pins, keychains, and art prints. Find your next favorite collectible." />
+        <meta property="og:title" content="Store | B&B Trinkets" />
+        <meta property="og:description" content="Browse our official shop catalog of artisan trinkets, pins, keychains, and art prints. Find your next favorite collectible." />
+        <link rel="canonical" href="https://ais-pre-fhcnh67djbrp5xiwpa7v7c-423522107291.asia-east1.run.app/store" />
+      </Helmet>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       {/* Toast Notification */}
       {addedToast && (
         <div className="fixed top-24 right-6 z-50 bg-bb-navy text-white px-6 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 border border-bb-teal/40 animate-bounce">
@@ -1447,5 +1456,6 @@ export default function Store() {
         </div>
       )}
     </div>
+    </>
   );
 }
