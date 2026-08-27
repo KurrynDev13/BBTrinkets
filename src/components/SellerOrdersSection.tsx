@@ -304,7 +304,9 @@ export default function SellerOrdersSection({
         <div className="space-y-4">
           {filteredOrders.map(order => {
             const isExpanded = expandedIds.has(order.id);
-            const isNeedsPrep = order.status === 'paid' || order.status === 'preparing';
+            const isPreparing = order.status === 'preparing' || (order.status === 'paid' && !!order.seller_notes?.toLowerCase().includes('crafting'));
+            const isPaidNotPreparing = order.status === 'paid' && !isPreparing;
+            const isNeedsPrep = order.status === 'paid' || order.status === 'preparing' || isPreparing;
             const isShipped = order.status === 'shipped';
             const isPending = order.status === 'pending';
             const isCompleted = order.status === 'completed';
@@ -399,14 +401,14 @@ export default function SellerOrdersSection({
 
                     <div className="flex items-center gap-2">
                       <span className={`px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1.5 shrink-0 ${
+                        isPreparing ? 'bg-indigo-100 text-indigo-800' :
                         order.status === 'paid' ? 'bg-teal-100 text-teal-800' :
-                        order.status === 'preparing' ? 'bg-indigo-100 text-indigo-800' :
                         order.status === 'shipped' ? 'bg-purple-100 text-purple-800' :
                         order.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
                         'bg-amber-100 text-amber-800'
                       }`}>
                         <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                        {order.status.toUpperCase()}
+                        {isPreparing ? 'PREPARING' : order.status.toUpperCase()}
                       </span>
 
                       <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors hidden sm:inline ${
@@ -530,7 +532,7 @@ export default function SellerOrdersSection({
 
                           {/* Action Hub Controls for B&B */}
                           <div className="pt-3 border-t border-bb-navy/10 space-y-2">
-                            {order.status === 'paid' && (
+                            {isPaidNotPreparing && (
                               <div className="grid grid-cols-2 gap-2">
                                 <button
                                   type="button"
@@ -553,7 +555,7 @@ export default function SellerOrdersSection({
                               </div>
                             )}
 
-                            {order.status === 'preparing' && (
+                            {isPreparing && (
                               <button
                                 type="button"
                                 onClick={(e) => {

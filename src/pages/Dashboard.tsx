@@ -711,9 +711,12 @@ export default function Dashboard() {
     }
   };
 
-  // Role toggle for testing
+  // Role toggle: Only available to Admin or Approved Twin Artists
   const handleToggleRole = async () => {
     if (!profile) return;
+    if (!profile.is_admin && profile.seller_status !== 'approved') {
+      return;
+    }
     const newRole = profile.role === 'seller' ? 'buyer' : 'seller';
     try {
       await supabase.from('profiles').update({ role: newRole }).eq('id', profile.id);
@@ -721,6 +724,19 @@ export default function Dashboard() {
       console.warn(e);
     }
     const updated = { ...profile, role: newRole as 'buyer' | 'seller' };
+    setProfile(updated);
+    refreshAllData(updated);
+  };
+
+  // Helper for pending applicants to switch to Collector view
+  const handleSwitchToCollectorMode = async () => {
+    if (!profile) return;
+    try {
+      await supabase.from('profiles').update({ role: 'buyer' }).eq('id', profile.id);
+    } catch (e) {
+      console.warn(e);
+    }
+    const updated = { ...profile, role: 'buyer' as const };
     setProfile(updated);
     refreshAllData(updated);
   };
@@ -765,11 +781,15 @@ export default function Dashboard() {
 
   if (!profile) return null;
 
-  // Determine seller access state
-  const isSellerRole = profile.role === 'seller';
-  const isPendingSeller = isSellerRole && !profile.is_admin && profile.seller_status === 'pending';
-  const isRejectedSeller = isSellerRole && !profile.is_admin && profile.seller_status === 'rejected';
-  const isApprovedSeller = isSellerRole && (profile.is_admin || profile.seller_status === 'approved');
+  // Determine seller access state strictly
+  const isUserAdmin = !!profile.is_admin;
+  const isApprovedSeller = isUserAdmin || profile.seller_status === 'approved';
+  const isPendingSeller = !isUserAdmin && profile.seller_status === 'pending';
+  const isRejectedSeller = !isUserAdmin && profile.seller_status === 'rejected';
+
+  // Only Admin or Approved Twin Artists have access to seller studio and switching modes
+  const canSwitchRole = isUserAdmin || isApprovedSeller;
+  const isSellerRole = profile.role === 'seller' && (isApprovedSeller || isPendingSeller || isRejectedSeller);
 
   return (
     <div className="min-h-screen bg-bb-cream/60 py-8 sm:py-12">
@@ -847,14 +867,16 @@ export default function Dashboard() {
 
             {/* Quick Actions */}
             <div className="flex flex-wrap items-center gap-2.5 self-stretch sm:self-auto justify-end">
-              <button
-                onClick={handleToggleRole}
-                title="Switch view to test Buyer or Seller experiences"
-                className="text-xs bg-bb-cream hover:bg-bb-navy/10 text-bb-navy font-semibold px-3.5 py-2 rounded-full border border-bb-navy/15 transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <RefreshCw size={12} />
-                Switch to {profile.role === 'seller' ? 'Buyer Mode' : 'Seller Mode'}
-              </button>
+              {canSwitchRole && (
+                <button
+                  onClick={handleToggleRole}
+                  title="Switch view between Studio Management and Collector views"
+                  className="text-xs bg-bb-cream hover:bg-bb-navy/10 text-bb-navy font-semibold px-3.5 py-2 rounded-full border border-bb-navy/15 transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw size={12} />
+                  Switch to {profile.role === 'seller' ? 'Collector View' : 'Studio / Seller View'}
+                </button>
+              )}
 
               <button
                 onClick={handleSignOut}
@@ -937,7 +959,7 @@ export default function Dashboard() {
               profile={profile}
               application={userApplication}
               onRefresh={() => checkUser()}
-              onSwitchToBuyerMode={handleToggleRole}
+              onSwitchToBuyerMode={handleSwitchToCollectorMode}
               onUpdateApplication={handleUpdateApplicantProfile}
             />
           ) : (

@@ -70,7 +70,7 @@ export default function Navbar() {
               <div className="flex items-center gap-4 border-l border-bb-navy/20 pl-6">
                 <Link to="/dashboard" className="text-bb-navy hover:text-bb-teal font-medium transition-colors flex items-center gap-2">
                   <User size={18} />
-                  {profile?.role === 'seller' ? 'Seller Dashboard' : 'My Account'}
+                  {(profile?.is_admin || profile?.seller_status === 'approved') ? 'Artist Studio' : 'My Account'}
                 </Link>
                 <button 
                   onClick={handleLogout}
@@ -112,7 +112,7 @@ export default function Navbar() {
             {session ? (
               <>
                 <Link to="/dashboard" className="block px-3 py-2 text-bb-navy font-medium" onClick={() => setIsOpen(false)}>
-                  {profile?.role === 'seller' ? 'Seller Dashboard' : 'My Account'}
+                  {(profile?.is_admin || profile?.seller_status === 'approved') ? 'Artist Studio' : 'My Account'}
                 </Link>
                 <button onClick={() => { handleLogout(); setIsOpen(false); }} className="block w-full text-left px-3 py-2 text-bb-navy font-medium">
                   Logout

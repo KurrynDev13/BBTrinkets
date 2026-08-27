@@ -164,7 +164,16 @@ export default function BuyerOrdersSection({
     }
   };
 
-  const getStatusBadge = (status: OrderStatus) => {
+  const getStatusBadge = (status: OrderStatus, sellerNotes?: string) => {
+    const isPrep = status === 'preparing' || (status === 'paid' && !!sellerNotes?.toLowerCase().includes('crafting'));
+    if (isPrep) {
+      return (
+        <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-200/80 inline-flex items-center gap-1.5 shrink-0">
+          <Package size={12} className="text-indigo-600 animate-pulse" /> To Ship (Preparing)
+        </span>
+      );
+    }
+
     switch (status) {
       case 'pending':
         return (
@@ -176,12 +185,6 @@ export default function BuyerOrdersSection({
         return (
           <span className="px-3 py-1 rounded-full text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200/80 inline-flex items-center gap-1.5 shrink-0">
             <CheckCircle2 size={12} className="text-teal-600" /> Paid • Awaiting Prep
-          </span>
-        );
-      case 'preparing':
-        return (
-          <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-200/80 inline-flex items-center gap-1.5 shrink-0">
-            <Package size={12} className="text-indigo-600 animate-pulse" /> To Ship (Preparing)
           </span>
         );
       case 'shipped':
@@ -477,13 +480,13 @@ export default function BuyerOrdersSection({
                     </div>
 
                     <div className="hidden sm:block">
-                      {getStatusBadge(order.status)}
+                      {getStatusBadge(order.status, order.seller_notes)}
                     </div>
                   </div>
 
                   {/* Mobile Status Badge */}
                   <div className="sm:hidden flex items-center justify-between">
-                    {getStatusBadge(order.status)}
+                    {getStatusBadge(order.status, order.seller_notes)}
                     <span className="font-serif font-bold text-sm text-bb-navy">
                       ₱{order.total_amount.toFixed(2)}
                     </span>
