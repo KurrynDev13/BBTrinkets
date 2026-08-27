@@ -102,25 +102,29 @@ export default function Navbar() {
 
       {/* Mobile Menu */}
       {isOpen && (
-        <div className="md:hidden bg-white border-t border-bb-navy/10 absolute w-full">
-          <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-            <Link to="/" className="block px-3 py-2 text-bb-navy font-medium" onClick={() => setIsOpen(false)}>Home</Link>
-            <Link to="/store" className="block px-3 py-2 text-bb-navy font-medium" onClick={() => setIsOpen(false)}>Store</Link>
-            <Link to="/about" className="block px-3 py-2 text-bb-navy font-medium" onClick={() => setIsOpen(false)}>About Us</Link>
-            <Link to="/contact" className="block px-3 py-2 text-bb-navy font-medium" onClick={() => setIsOpen(false)}>Contact</Link>
+        <div className="md:hidden bg-white border-t border-bb-navy/10 absolute w-full shadow-lg">
+          <div className="px-4 pt-4 pb-6 space-y-3 sm:px-6">
+            <Link to="/" className="block px-4 py-3 text-bb-navy font-medium text-lg rounded-xl hover:bg-bb-cream/50 transition-colors" onClick={() => setIsOpen(false)}>Home</Link>
+            <Link to="/store" className="block px-4 py-3 text-bb-navy font-medium text-lg rounded-xl hover:bg-bb-cream/50 transition-colors" onClick={() => setIsOpen(false)}>Store</Link>
+            <Link to="/about" className="block px-4 py-3 text-bb-navy font-medium text-lg rounded-xl hover:bg-bb-cream/50 transition-colors" onClick={() => setIsOpen(false)}>About Us</Link>
+            <Link to="/contact" className="block px-4 py-3 text-bb-navy font-medium text-lg rounded-xl hover:bg-bb-cream/50 transition-colors" onClick={() => setIsOpen(false)}>Contact</Link>
             
-            {session ? (
-              <>
-                <Link to="/dashboard" className="block px-3 py-2 text-bb-navy font-medium" onClick={() => setIsOpen(false)}>
-                  {(profile?.is_admin || profile?.seller_status === 'approved') ? 'Artist Studio' : 'My Account'}
+            <div className="pt-4 border-t border-bb-navy/10">
+              {session ? (
+                <div className="space-y-3">
+                  <Link to="/dashboard" className="block w-full text-center px-4 py-3.5 bg-bb-navy/5 text-bb-navy rounded-xl font-semibold text-lg hover:bg-bb-navy/10 transition-colors" onClick={() => setIsOpen(false)}>
+                    {(profile?.is_admin || profile?.seller_status === 'approved') ? 'Artist Studio' : 'My Account'}
+                  </Link>
+                  <button onClick={() => { handleLogout(); setIsOpen(false); }} className="block w-full text-center px-4 py-3.5 bg-bb-navy text-bb-cream rounded-xl font-semibold text-lg hover:bg-bb-dark transition-colors">
+                    Logout
+                  </button>
+                </div>
+              ) : (
+                <Link to="/auth" className="block w-full text-center px-4 py-3.5 bg-bb-teal text-white rounded-xl font-bold text-lg shadow-sm hover:bg-opacity-90 transition-colors" onClick={() => setIsOpen(false)}>
+                  Sign In / Register
                 </Link>
-                <button onClick={() => { handleLogout(); setIsOpen(false); }} className="block w-full text-left px-3 py-2 text-bb-navy font-medium">
-                  Logout
-                </button>
-              </>
-            ) : (
-              <Link to="/auth" className="block px-3 py-2 text-bb-teal font-bold" onClick={() => setIsOpen(false)}>Sign In / Register</Link>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}

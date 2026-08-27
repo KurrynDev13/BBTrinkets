@@ -46,19 +46,19 @@ export default function Home() {
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-bb-teal/10 border border-bb-teal/20 text-bb-teal font-semibold tracking-wide text-xs sm:text-sm">
                 <Sparkles size={16} /> HANDCRAFTED PINS, PRINTS & KEYCHAINS
               </div>
-              <h1 className="text-5xl sm:text-6xl md:text-7xl font-serif font-bold text-bb-navy leading-[1.1]">
+              <h1 className="text-4xl sm:text-6xl md:text-7xl font-serif font-bold text-bb-navy leading-[1.1]">
                 Curated Art & <br /> <span className="text-bb-teal">Trinkets</span> for You.
               </h1>
-              <p className="text-base sm:text-lg text-bb-navy/70 max-w-xl leading-relaxed">
+              <p className="text-sm sm:text-lg text-bb-navy/70 max-w-xl leading-relaxed">
                 Discover limited edition handcrafted collectibles: artisan keychains (₱30–₱40), enamel pins (₱40–₱45), gallery art prints (₱200–₱500), and vinyl stickers from independent twin creators.
               </p>
               
-              <div className="flex flex-wrap gap-4 pt-2">
-                <Link to="/store" className="bg-bb-navy text-bb-cream px-8 py-4 rounded-full font-semibold hover:bg-bb-dark transition-all flex items-center gap-2 group shadow-md hover:shadow-lg active:scale-95">
+              <div className="flex flex-col sm:flex-row gap-3 pt-2 w-full sm:w-auto">
+                <Link to="/store" className="w-full sm:w-auto justify-center bg-bb-navy text-bb-cream px-8 py-4 rounded-full font-semibold hover:bg-bb-dark transition-all flex items-center gap-2 group shadow-md hover:shadow-lg active:scale-95">
                   Browse Shop
                   <ArrowRight className="group-hover:translate-x-1 transition-transform" size={18} />
                 </Link>
-                <Link to="/auth" className="bg-white text-bb-navy border-2 border-bb-navy px-8 py-4 rounded-full font-semibold hover:bg-bb-navy/5 transition-colors">
+                <Link to="/auth" className="w-full sm:w-auto justify-center text-center bg-white text-bb-navy border-2 border-bb-navy px-8 py-4 rounded-full font-semibold hover:bg-bb-navy/5 transition-colors">
                   Seller Portal
                 </Link>
               </div>

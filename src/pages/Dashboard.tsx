@@ -37,7 +37,6 @@ import SellerReviewsSection from '../components/SellerReviewsSection';
 import AdminSellerApplicationsSection from '../components/AdminSellerApplicationsSection';
 import PendingSellerNotice from '../components/PendingSellerNotice';
 import DeleteAccountModal from '../components/DeleteAccountModal';
-import RequestTwinAccessModal from '../components/RequestTwinAccessModal';
 import DeleteProductModal from '../components/DeleteProductModal';
 import EditProductModal from '../components/EditProductModal';
 
@@ -50,7 +49,6 @@ export default function Dashboard() {
   const [userApplication, setUserApplication] = useState<SellerApplication | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [isRequestTwinModalOpen, setIsRequestTwinModalOpen] = useState(false);
   
   // Seller View Sub-tabs: 'fulfillment' | 'catalog' | 'reviews' | 'applications'
   const [sellerViewTab, setSellerViewTab] = useState<'fulfillment' | 'catalog' | 'reviews' | 'applications'>('fulfillment');
@@ -1145,30 +1143,21 @@ export default function Dashboard() {
             </div>
 
             {/* Quick Actions */}
-            <div className="flex flex-wrap items-center gap-2.5 self-stretch sm:self-auto justify-end">
-              {profile.role === 'buyer' && !isPendingSeller && !isRejectedSeller && !isApprovedSeller && (
-                <button
-                  onClick={() => setIsRequestTwinModalOpen(true)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-amber-600 hover:bg-amber-700 text-white transition-colors font-bold text-xs shadow-xs cursor-pointer"
-                >
-                  <Sparkles size={13} /> Request Twin Artist Access
-                </button>
-              )}
-
+            <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5 w-full sm:w-auto mt-4 sm:mt-0 sm:self-auto sm:justify-end">
               {canSwitchRole && (
                 <button
                   onClick={handleToggleRole}
                   title="Switch view between Studio Management and Collector views"
-                  className="text-xs bg-bb-cream hover:bg-bb-navy/10 text-bb-navy font-semibold px-3.5 py-2 rounded-full border border-bb-navy/15 transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="w-full sm:w-auto justify-center text-xs bg-bb-cream hover:bg-bb-navy/10 text-bb-navy font-semibold px-4 py-3 sm:py-2 rounded-xl sm:rounded-full border border-bb-navy/15 transition-colors flex items-center gap-2 cursor-pointer"
                 >
-                  <RefreshCw size={12} />
+                  <RefreshCw size={14} className="sm:w-3 sm:h-3" />
                   Switch to {profile.role === 'seller' ? 'Collector View' : 'Studio / Seller View'}
                 </button>
               )}
 
               <button
                 onClick={handleSignOut}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-bb-navy/15 text-bb-navy hover:bg-bb-cream transition-colors font-semibold text-xs shadow-xs cursor-pointer"
+                className="w-full sm:w-auto justify-center flex items-center gap-2 px-4 py-3 sm:py-2 rounded-xl sm:rounded-full border border-bb-navy/15 text-bb-navy hover:bg-bb-cream transition-colors font-semibold text-xs shadow-xs cursor-pointer"
               >
                 <LogOut size={14} /> Sign Out
               </button>
@@ -1176,9 +1165,9 @@ export default function Dashboard() {
               <button
                 onClick={() => setIsDeleteModalOpen(true)}
                 title="Permanently delete account and all associated data"
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors font-semibold text-xs shadow-xs cursor-pointer"
+                className="w-full sm:w-auto justify-center flex items-center gap-2 px-4 py-3 sm:py-2 rounded-xl sm:rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors font-semibold text-xs shadow-xs cursor-pointer"
               >
-                <Trash2 size={13} /> Delete Account
+                <Trash2 size={14} /> Delete Account
               </button>
             </div>
           </div>
@@ -1574,27 +1563,6 @@ export default function Dashboard() {
         ) : (
           /* ---------------- BUYER EXPERIENCE (COLLECTOR) ---------------- */
           <div className="space-y-8">
-            {/* Twin Artist Access Request Banner */}
-            <div className="bg-gradient-to-r from-amber-50 via-white to-orange-50/50 p-6 rounded-3xl border border-amber-200 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 shadow-inner">
-                  <Sparkles size={24} />
-                </div>
-                <div>
-                  <h3 className="font-serif font-bold text-base text-bb-navy">Are you a Twin Artist?</h3>
-                  <p className="text-xs text-bb-navy/70 mt-0.5 max-w-xl">
-                    Request Twin Artist access to upload handcrafted pins, keychains, prints, and artworks to the studio catalog.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsRequestTwinModalOpen(true)}
-                className="px-5 py-2.5 rounded-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
-              >
-                <Sparkles size={13} /> Request Twin Artist Access
-              </button>
-            </div>
-
             <BuyerOrdersSection
               orders={orders}
               onRefresh={() => refreshAllData(profile)}
@@ -1603,17 +1571,6 @@ export default function Dashboard() {
             />
           </div>
         )}
-
-        {/* Request Twin Artist Access Modal */}
-        <RequestTwinAccessModal
-          isOpen={isRequestTwinModalOpen}
-          onClose={() => setIsRequestTwinModalOpen(false)}
-          profile={profile}
-          onApplicationSubmitted={(updatedProfile) => {
-            setProfile(updatedProfile);
-            checkUser();
-          }}
-        />
 
         {/* Delete Account Confirmation Modal */}
         <DeleteAccountModal

@@ -776,7 +776,7 @@ export default function Store() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
           {filteredProducts.map(product => {
             const isArt = product.category === 'Artworks' || product.category === 'Prints';
             return (
@@ -842,20 +842,21 @@ export default function Store() {
                   </div>
 
                   {/* Price & Action */}
-                  <div className="flex items-center justify-between pt-3 border-t border-bb-cream mt-auto">
+                  <div className="flex flex-col xl:flex-row xl:items-center justify-between pt-3 border-t border-bb-cream mt-auto gap-2">
                     <div>
-                      <span className="text-xs text-bb-navy/40 block font-medium">Price</span>
-                      <span className="font-serif font-bold text-xl text-bb-teal">
+                      <span className="text-[10px] sm:text-xs text-bb-navy/40 block font-medium">Price</span>
+                      <span className="font-serif font-bold text-base sm:text-xl text-bb-teal">
                         ₱{product.price.toFixed(2)}
                       </span>
                     </div>
 
                     <button
                       onClick={() => addToCart(product, 1)}
-                      className="bg-bb-navy text-white px-4 py-2 rounded-full text-xs font-bold hover:bg-bb-dark transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                      className="w-full xl:w-auto justify-center bg-bb-navy text-white px-3 sm:px-4 py-2 rounded-full text-[10px] sm:text-xs font-bold hover:bg-bb-dark transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
                     >
-                      <Plus size={14} />
-                      Add to Bag
+                      <Plus size={14} className="hidden sm:block" />
+                      <span className="hidden sm:inline">Add to Bag</span>
+                      <span className="sm:hidden">Add</span>
                     </button>
                   </div>
                 </div>
@@ -1015,8 +1016,8 @@ export default function Store() {
 
       {/* Product Detail Modal */}
       {selectedProduct && (
-        <div className="fixed inset-0 bg-bb-navy/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col md:flex-row relative">
+        <div className="fixed inset-0 bg-bb-navy/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col md:flex-row relative animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:fade-in-0 duration-300">
             <button 
               onClick={() => setSelectedProduct(null)}
               className="absolute top-4 right-4 w-10 h-10 bg-bb-cream rounded-full flex items-center justify-center text-bb-navy hover:bg-bb-teal hover:text-white transition-colors z-10 shadow-sm"

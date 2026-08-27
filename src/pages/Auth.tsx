@@ -9,7 +9,6 @@ export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'buyer' | 'seller'>('buyer');
   const [fullName, setFullName] = useState('');
   const [gcash, setGcash] = useState('');
 
@@ -38,7 +37,8 @@ export default function Auth() {
       } else {
         // Determine admin status: Developer & Admin email is rhymnoorioque@gmail.com
         const isAdmin = email.trim().toLowerCase() === 'rhymnoorioque@gmail.com';
-        const sellerStatus = isAdmin ? 'approved' : (role === 'seller' ? 'pending' : 'none');
+        const sellerStatus = isAdmin ? 'approved' : 'none';
+        const role = isAdmin ? 'seller' : 'buyer';
         const contactGcash = gcash.trim() || '09000000000';
 
         // Register with metadata
@@ -120,11 +120,7 @@ export default function Auth() {
             return;
           }
           
-          alert(
-            role === 'seller'
-              ? 'Twin Artist account created! Please check your email to confirm your account, then sign in to check verification status.'
-              : 'Registration successful! Please check your email if confirmation is needed, then sign in.'
-          );
+          alert('Registration successful! Please check your email if confirmation is needed, then sign in.');
           setIsLogin(true);
         }
       }
@@ -180,55 +176,9 @@ export default function Auth() {
                 
                 <div>
                   <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">
-                    Account Type *
+                    Buyer GCash Number *
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setRole('buyer')}
-                      className={`py-3 rounded-xl border transition-all text-xs font-bold ${
-                        role === 'buyer'
-                          ? 'bg-bb-navy text-white border-bb-navy shadow-xs'
-                          : 'border-bb-navy/20 text-bb-navy hover:bg-bb-cream'
-                      }`}
-                    >
-                      Buyer / Collector
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRole('seller')}
-                      className={`py-3 rounded-xl border transition-all text-xs font-bold flex items-center justify-center gap-1.5 ${
-                        role === 'seller'
-                          ? 'bg-bb-teal text-white border-bb-teal shadow-xs'
-                          : 'border-bb-navy/20 text-bb-navy hover:bg-bb-cream'
-                      }`}
-                    >
-                      <Store size={14} />
-                      Twin Artist (Seller)
-                    </button>
-                  </div>
-                </div>
-
-                {/* Seller Note */}
-                {role === 'seller' && (
-                  <div className="p-4 bg-teal-50/80 border border-teal-200/80 rounded-2xl space-y-2 animate-fade-in">
-                    <div className="flex items-start gap-2.5">
-                      <ShieldCheck size={18} className="text-teal-700 shrink-0 mt-0.5" />
-                      <div className="text-xs text-teal-900 leading-relaxed">
-                        <strong className="block font-bold">Twin Artist Access</strong>
-                        New twin seller registrations are confirmed by Developer & Admin (Rhym). Payouts and payments are automatically handled via PayMongo.
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Buyers Only: GCash Number */}
-                {role === 'buyer' && (
-                  <div>
-                    <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">
-                      Buyer GCash Number *
-                    </label>
-                    <input
+                  <input
                       type="text"
                       required
                       placeholder="09XXXXXXXXX"
@@ -236,9 +186,8 @@ export default function Auth() {
                       onChange={(e) => setGcash(e.target.value)}
                       className="w-full px-4 py-3 rounded-xl border border-bb-navy/20 focus:outline-none focus:ring-2 focus:ring-bb-teal bg-white text-sm font-mono"
                     />
-                    <p className="text-[11px] text-bb-navy/50 mt-1">Used for paying for orders and payment confirmations via PayMongo.</p>
-                  </div>
-                )}
+                  <p className="text-[11px] text-bb-navy/50 mt-1">Used for paying for orders and payment confirmations via PayMongo.</p>
+                </div>
               </>
             )}
 
@@ -279,7 +228,7 @@ export default function Auth() {
             {loading ? 'Processing...' : (
               isLogin 
                 ? 'Sign In to Dashboard' 
-                : (role === 'seller' ? 'Request Twin Artist Access' : 'Create Collector Account')
+                : 'Create Collector Account'
             )}
           </button>
           
@@ -289,7 +238,7 @@ export default function Auth() {
               onClick={() => { setIsLogin(!isLogin); setError(''); }}
               className="text-xs sm:text-sm text-bb-teal hover:text-bb-navy font-semibold transition-colors"
             >
-              {isLogin ? "Don't have an account? Register / Request Twin Artist Access" : 'Already have an account? Sign in'}
+              {isLogin ? "Don't have an account? Register as a Collector" : 'Already have an account? Sign in'}
             </button>
           </div>
         </form>
