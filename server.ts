@@ -1,17 +1,113 @@
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
+import { createClient } from '@supabase/supabase-js';
+
+// Lazy initialize Supabase server client
+function getSupabaseServer() {
+  const rawUrl = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
+  const supabaseUrl = rawUrl.replace(/\/+$/, '');
+  const supabaseKey = (
+    process.env.SUPABASE_SERVICE_ROLE_KEY || 
+    process.env.VITE_SUPABASE_ANON_KEY || 
+    process.env.SUPABASE_ANON_KEY || 
+    ''
+  ).trim();
+
+  if (!supabaseUrl || !supabaseKey) return null;
+  return createClient(supabaseUrl, supabaseKey, {
+    auth: { persistSession: false }
+  });
+}
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Use JSON parser for API routes, EXCEPT for Paymongo webhook which needs raw body for signature verification if strictly implemented.
+  // Use JSON parser for API routes
   app.use(express.json());
 
   // API Routes
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok' });
+  });
+
+  // Admin Seller Applications: Action (Approve / Reject)
+  app.post('/api/admin/applications/action', async (req, res) => {
+    try {
+      const { applicationId, userId, action, notes, callerEmail } = req.body || {};
+
+      if (!applicationId || !userId || !action) {
+        return res.status(400).json({ error: 'Missing required parameters (applicationId, userId, action).' });
+      }
+
+      const client = getSupabaseServer();
+      const now = new Date().toISOString();
+      const isApproved = action === 'approve';
+      const targetStatus = isApproved ? 'approved' : 'rejected';
+      const reviewNotes = notes || (isApproved ? 'Application approved by administrator.' : 'Application declined by administrator.');
+
+      if (client) {
+        // 1. Update seller_applications table
+        await client
+          .from('seller_applications')
+          .update({
+            status: targetStatus,
+            review_notes: reviewNotes,
+            reviewed_at: now
+          })
+          .eq('id', applicationId);
+
+        // 2. Update user profiles table
+        await client
+          .from('profiles')
+          .update({
+            seller_status: targetStatus,
+            role: isApproved ? 'seller' : 'buyer',
+            updated_at: now
+          })
+          .eq('id', userId);
+      }
+
+      return res.json({
+        success: true,
+        status: targetStatus,
+        applicationId,
+        userId,
+        reviewed_at: now
+      });
+    } catch (err: any) {
+      console.error('Error processing application action:', err);
+      return res.status(500).json({ error: err.message || 'Failed to update application status.' });
+    }
+  });
+
+  // User: Check verification & profile status safely
+  app.get('/api/user/status', async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+      if (!userId) {
+        return res.status(400).json({ error: 'userId is required' });
+      }
+
+      const client = getSupabaseServer();
+      if (!client) {
+        return res.json({ profile: null, application: null });
+      }
+
+      const [{ data: profile }, { data: application }] = await Promise.all([
+        client.from('profiles').select('*').eq('id', userId).maybeSingle(),
+        client.from('seller_applications').select('*').eq('user_id', userId).maybeSingle()
+      ]);
+
+      return res.json({
+        profile: profile || null,
+        application: application || null
+      });
+    } catch (err: any) {
+      console.error('Error fetching user status:', err);
+      return res.status(500).json({ error: err.message || 'Failed to fetch status' });
+    }
   });
 
   // Paymongo: Create a Checkout Link

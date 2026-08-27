@@ -153,37 +153,45 @@ export default function Dashboard() {
 
       // Check if this is a twin artist applicant needing synchronization
       if (!isFoundingAdmin && activeProfile) {
-        const isApplicant = metadata.role === 'seller' || metadata.seller_status === 'pending' || activeProfile.role === 'seller' || activeProfile.seller_status === 'pending';
-        
-        if (isApplicant && activeProfile.seller_status !== 'approved' && activeProfile.seller_status !== 'rejected') {
+        // If already rejected or approved, strictly preserve that status
+        if (activeProfile.seller_status === 'rejected') {
           activeProfile.role = 'seller';
-          activeProfile.seller_status = 'pending';
+        } else if (activeProfile.seller_status === 'approved') {
+          activeProfile.role = 'seller';
+        } else {
+          // Check if user requested twin artist access
+          const isApplicant = metadata.role === 'seller' || metadata.seller_status === 'pending' || activeProfile.role === 'seller' || activeProfile.seller_status === 'pending';
+          
+          if (isApplicant) {
+            activeProfile.role = 'seller';
+            activeProfile.seller_status = 'pending';
 
-          // Ensure seller application row exists in seller_applications table
-          const { data: existingApp } = await supabase
-            .from('seller_applications')
-            .select('id')
-            .eq('user_id', session.user.id)
-            .maybeSingle();
+            // Ensure seller application row exists in seller_applications table safely
+            try {
+              const { data: existingApp } = await supabase
+                .from('seller_applications')
+                .select('id, status')
+                .eq('user_id', session.user.id)
+                .maybeSingle();
 
-          if (!existingApp) {
-            await supabase.from('seller_applications').upsert({
-              user_id: session.user.id,
-              full_name: activeProfile.full_name || metadata.full_name || userEmail.split('@')[0],
-              email: userEmail,
-              gcash_number: activeProfile.gcash_number || metadata.gcash_number || '09000000000',
-              shop_name: 'B&B Twin Artists Studio',
-              craft_category: activeProfile.craft_category || 'Pins & Artwork',
-              status: 'pending',
-              applied_at: new Date().toISOString()
-            });
+              if (!existingApp) {
+                await supabase.from('seller_applications').upsert({
+                  user_id: session.user.id,
+                  full_name: activeProfile.full_name || metadata.full_name || userEmail.split('@')[0],
+                  email: userEmail,
+                  gcash_number: activeProfile.gcash_number || metadata.gcash_number || '09000000000',
+                  shop_name: 'B&B Twin Artists Studio',
+                  craft_category: activeProfile.craft_category || 'Pins & Artwork',
+                  status: 'pending',
+                  applied_at: new Date().toISOString()
+                });
+              } else if (existingApp.status === 'rejected' || existingApp.status === 'approved') {
+                activeProfile.seller_status = existingApp.status;
+              }
+            } catch (syncErr) {
+              console.warn('Sync notice:', syncErr);
+            }
           }
-
-          // Keep profiles table in sync
-          await supabase.from('profiles').update({
-            role: 'seller',
-            seller_status: 'pending'
-          }).eq('id', session.user.id);
         }
       }
 
@@ -238,37 +246,38 @@ export default function Dashboard() {
       const allApps: SellerApplication[] = (!error && dbApps) ? [...dbApps] : [];
 
       // Query profiles for any non-admin users to guarantee no applicants are missed
-      const { data: nonAdminProfiles } = await supabase
-        .from('profiles')
-        .select('*')
-        .neq('email', 'rhymnoorioque@gmail.com')
-        .eq('is_admin', false);
+      try {
+        const { data: nonAdminProfiles } = await supabase
+          .from('profiles')
+          .select('*')
+          .neq('email', 'rhymnoorioque@gmail.com')
+          .eq('is_admin', false);
 
-      if (nonAdminProfiles && nonAdminProfiles.length > 0) {
-        for (const prof of nonAdminProfiles) {
-          const isSellerCandidate = prof.role === 'seller' || prof.seller_status === 'pending' || prof.seller_status === 'approved' || prof.seller_status === 'rejected';
-          const alreadyListed = allApps.some(a => a.user_id === prof.id || (prof.email && a.email && a.email.toLowerCase() === prof.email.toLowerCase()));
+        if (nonAdminProfiles && nonAdminProfiles.length > 0) {
+          for (const prof of nonAdminProfiles) {
+            const isSellerCandidate = prof.role === 'seller' || prof.seller_status === 'pending' || prof.seller_status === 'approved' || prof.seller_status === 'rejected';
+            const existingIndex = allApps.findIndex(a => a.user_id === prof.id || (prof.email && a.email && a.email.toLowerCase() === prof.email.toLowerCase()));
 
-          if (isSellerCandidate && !alreadyListed) {
-            const synthesizedApp: SellerApplication = {
-              id: prof.id,
-              user_id: prof.id,
-              full_name: prof.full_name || (prof.email ? prof.email.split('@')[0] : 'Twin Artist Applicant'),
-              email: prof.email || 'applicant@bbtrinkets.ph',
-              gcash_number: prof.gcash_number || '09000000000',
-              shop_name: prof.shop_name || 'B&B Twin Artists Studio',
-              craft_category: prof.craft_category || 'Pins & Artwork',
-              portfolio_url: prof.portfolio_url || '',
-              bio_or_experience: prof.bio || '',
-              status: prof.seller_status === 'approved' ? 'approved' : (prof.seller_status === 'rejected' ? 'rejected' : 'pending'),
-              applied_at: prof.created_at || new Date().toISOString()
-            };
-            allApps.unshift(synthesizedApp);
-
-            // Persist to database so it stays permanently recorded
-            supabase.from('seller_applications').upsert(synthesizedApp).then();
+            if (isSellerCandidate && existingIndex === -1) {
+              const synthesizedApp: SellerApplication = {
+                id: prof.id,
+                user_id: prof.id,
+                full_name: prof.full_name || (prof.email ? prof.email.split('@')[0] : 'Twin Artist Applicant'),
+                email: prof.email || 'applicant@bbtrinkets.ph',
+                gcash_number: prof.gcash_number || '09000000000',
+                shop_name: prof.shop_name || 'B&B Twin Artists Studio',
+                craft_category: prof.craft_category || 'Pins & Artwork',
+                portfolio_url: prof.portfolio_url || '',
+                bio_or_experience: prof.bio || '',
+                status: prof.seller_status === 'approved' ? 'approved' : (prof.seller_status === 'rejected' ? 'rejected' : 'pending'),
+                applied_at: prof.created_at || new Date().toISOString()
+              };
+              allApps.push(synthesizedApp);
+            }
           }
         }
+      } catch (profErr) {
+        console.warn('Profiles scan notice:', profErr);
       }
 
       setApplications(allApps);
@@ -280,6 +289,24 @@ export default function Dashboard() {
 
   const fetchUserApplication = async (userId: string) => {
     try {
+      // 1. Try server API route first (handles RLS cleanly)
+      try {
+        const res = await fetch(`/api/user/status?userId=${userId}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.application) {
+            setUserApplication(json.application);
+            if (json.profile && json.profile.seller_status) {
+              setProfile(prev => prev ? { ...prev, seller_status: json.profile.seller_status } : prev);
+            }
+            return;
+          }
+        }
+      } catch (serverErr) {
+        // Fallback to Supabase direct client
+      }
+
+      // 2. Direct Supabase Client
       const { data } = await supabase
         .from('seller_applications')
         .select('*')
@@ -288,11 +315,14 @@ export default function Dashboard() {
 
       if (data) {
         setUserApplication(data);
+        if (data.status) {
+          setProfile(prev => prev ? { ...prev, seller_status: data.status as any } : prev);
+        }
       } else {
         setUserApplication(null);
       }
     } catch (e) {
-      console.error('Error fetching user application:', e);
+      console.warn('Notice fetching user application:', e);
       setUserApplication(null);
     }
   };
@@ -302,8 +332,24 @@ export default function Dashboard() {
     try {
       const now = new Date().toISOString();
 
-      // 1. Update seller_applications status
-      const { error: appErr } = await supabase
+      // 1. Update via Server API (guarantees DB persistence across sessions)
+      try {
+        await fetch('/api/admin/applications/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            applicationId: app.id,
+            userId: app.user_id,
+            action: 'approve',
+            callerEmail: profile?.email
+          })
+        });
+      } catch (e) {
+        console.warn('Server action notice:', e);
+      }
+
+      // 2. Update via Supabase direct client
+      await supabase
         .from('seller_applications')
         .update({
           status: 'approved',
@@ -312,10 +358,7 @@ export default function Dashboard() {
         })
         .eq('id', app.id);
 
-      if (appErr) throw appErr;
-
-      // 2. Upgrade user profile in Supabase to approved seller
-      const { error: profErr } = await supabase
+      await supabase
         .from('profiles')
         .update({
           role: 'seller',
@@ -327,8 +370,6 @@ export default function Dashboard() {
           updated_at: now
         })
         .eq('id', app.user_id);
-
-      if (profErr) throw profErr;
 
       // 3. Update UI state
       setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'approved', reviewed_at: now } : a));
@@ -342,21 +383,38 @@ export default function Dashboard() {
     try {
       const now = new Date().toISOString();
       const app = applications.find(a => a.id === applicationId);
+      const reasonNotes = notes || 'Application declined by shop administrator.';
 
-      // 1. Update seller_applications status
-      const { error: appErr } = await supabase
+      // 1. Update via Server API (guarantees DB persistence across sessions)
+      if (app) {
+        try {
+          await fetch('/api/admin/applications/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              applicationId: applicationId,
+              userId: app.user_id,
+              action: 'reject',
+              notes: reasonNotes,
+              callerEmail: profile?.email
+            })
+          });
+        } catch (e) {
+          console.warn('Server action notice:', e);
+        }
+      }
+
+      // 2. Update via Supabase direct client
+      await supabase
         .from('seller_applications')
         .update({
           status: 'rejected',
-          review_notes: notes || 'Application declined by shop administrator.',
+          review_notes: reasonNotes,
           reviewed_at: now,
           reviewed_by: profile?.id
         })
         .eq('id', applicationId);
 
-      if (appErr) throw appErr;
-
-      // 2. Update profile
       if (app) {
         await supabase
           .from('profiles')
@@ -367,8 +425,8 @@ export default function Dashboard() {
           .eq('id', app.user_id);
       }
 
-      // 3. Update state
-      setApplications(prev => prev.map(a => a.id === applicationId ? { ...a, status: 'rejected', review_notes: notes, reviewed_at: now } : a));
+      // 3. Update UI state
+      setApplications(prev => prev.map(a => a.id === applicationId ? { ...a, status: 'rejected', review_notes: reasonNotes, reviewed_at: now } : a));
     } catch (err: any) {
       alert('Error rejecting application: ' + (err.message || 'Unknown error'));
     }

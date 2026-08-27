@@ -24,6 +24,17 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- 1.5 Helper function to check if current user is admin/founding seller without RLS recursion
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND (is_admin = true OR email = 'rhymnoorioque@gmail.com')
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone." ON public.profiles;
 DROP POLICY IF EXISTS "Users can insert their own profile." ON public.profiles;
@@ -31,10 +42,12 @@ DROP POLICY IF EXISTS "Users can update own profile." ON public.profiles;
 DROP POLICY IF EXISTS "Admins can update all profiles." ON public.profiles;
 
 CREATE POLICY "Public profiles are viewable by everyone." ON public.profiles FOR SELECT USING (true);
-CREATE POLICY "Users can insert their own profile." ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
-CREATE POLICY "Users can update own profile." ON public.profiles FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Admins can update all profiles." ON public.profiles FOR UPDATE USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.is_admin = true)
+CREATE POLICY "Users can insert their own profile." ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id OR public.is_admin());
+CREATE POLICY "Users can update own profile." ON public.profiles FOR UPDATE USING (
+  auth.uid() = id OR public.is_admin() OR auth.jwt()->>'email' = 'rhymnoorioque@gmail.com'
+);
+CREATE POLICY "Admins can update all profiles." ON public.profiles FOR ALL USING (
+  public.is_admin() OR auth.jwt()->>'email' = 'rhymnoorioque@gmail.com'
 );
 
 -- Trigger to automatically create a profile on new Supabase signup
@@ -131,10 +144,14 @@ DROP POLICY IF EXISTS "Applicants can view their own application." ON public.sel
 DROP POLICY IF EXISTS "Applicants can create applications." ON public.seller_applications;
 DROP POLICY IF EXISTS "Admins can view and manage all applications." ON public.seller_applications;
 
-CREATE POLICY "Applicants can view their own application." ON public.seller_applications FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Applicants can create applications." ON public.seller_applications FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Applicants can view their own application." ON public.seller_applications FOR SELECT USING (
+  auth.uid() = user_id OR public.is_admin() OR auth.jwt()->>'email' = 'rhymnoorioque@gmail.com'
+);
+CREATE POLICY "Applicants can create applications." ON public.seller_applications FOR INSERT WITH CHECK (
+  auth.uid() = user_id OR public.is_admin() OR auth.jwt()->>'email' = 'rhymnoorioque@gmail.com'
+);
 CREATE POLICY "Admins can view and manage all applications." ON public.seller_applications FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND (profiles.is_admin = true OR profiles.role = 'seller'))
+  auth.uid() = user_id OR public.is_admin() OR auth.jwt()->>'email' = 'rhymnoorioque@gmail.com'
 );
 
 -- 3. Products Table (Artworks, Prints, Pins, Keychains, Stickers)
