@@ -38,6 +38,7 @@ import AdminSellerApplicationsSection from '../components/AdminSellerApplication
 import PendingSellerNotice from '../components/PendingSellerNotice';
 import DeleteAccountModal from '../components/DeleteAccountModal';
 import RequestTwinAccessModal from '../components/RequestTwinAccessModal';
+import DeleteProductModal from '../components/DeleteProductModal';
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -72,6 +73,10 @@ export default function Dashboard() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Delete Product State
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [isDeletingProduct, setIsDeletingProduct] = useState(false);
 
   const navigate = useNavigate();
 
@@ -865,6 +870,42 @@ export default function Dashboard() {
     }
   };
 
+  const handleDeleteProduct = async (product: Product) => {
+    setIsDeletingProduct(true);
+    try {
+      // 1. Delete product from database
+      const { error } = await supabase.from('products').delete().eq('id', product.id);
+      
+      if (error) {
+        throw new Error(error.message);
+      }
+      
+      // 2. Delete associated image from storage bucket if it's hosted by Supabase
+      if (product.image_url) {
+        const bucketPathStr = '/storage/v1/object/public/product-images/';
+        if (product.image_url.includes(bucketPathStr)) {
+          const filePath = product.image_url.split(bucketPathStr)[1];
+          if (filePath) {
+            // We do this asynchronously but wait for it so it cleans up correctly
+            const { error: storageError } = await supabase.storage
+              .from('product-images')
+              .remove([filePath]);
+            if (storageError) {
+              console.warn('Note: Product deleted, but failed to clean up image from storage:', storageError.message);
+            }
+          }
+        }
+      }
+      
+      setProducts(prev => prev.filter(p => p.id !== product.id));
+      setProductToDelete(null);
+    } catch (err: any) {
+      alert(err.message || 'Error deleting product');
+    } finally {
+      setIsDeletingProduct(false);
+    }
+  };
+
   // Role toggle: Only available to Admin or Approved Twin Artists
   const handleToggleRole = async () => {
     if (!profile) return;
@@ -1462,10 +1503,17 @@ export default function Dashboard() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {products.map(p => (
-                      <div key={p.id} className="bg-white p-4 rounded-2xl border border-bb-navy/10 shadow-sm flex flex-col justify-between">
+                      <div key={p.id} className="bg-white p-4 rounded-2xl border border-bb-navy/10 shadow-sm flex flex-col justify-between group relative overflow-hidden">
+                        <button
+                          onClick={() => setProductToDelete(p)}
+                          className="absolute top-2 right-2 p-2 bg-white/90 backdrop-blur-sm text-rose-500 hover:text-white hover:bg-rose-500 rounded-xl opacity-0 group-hover:opacity-100 transition-all shadow-sm border border-bb-navy/5 z-10"
+                          title="Delete product"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                         <div>
                           <img src={p.image_url} alt={p.title} className="w-full h-36 object-cover rounded-xl bg-bb-cream mb-3" />
-                          <h4 className="font-bold text-xs text-bb-navy line-clamp-1">{p.title}</h4>
+                          <h4 className="font-bold text-xs text-bb-navy line-clamp-1 pr-8">{p.title}</h4>
                           <p className="text-bb-teal font-bold text-sm mt-0.5">₱{p.price.toFixed(2)}</p>
                         </div>
                         <span className="text-[10px] font-semibold text-bb-navy/60 bg-bb-cream px-2 py-0.5 rounded-md mt-2 inline-block self-start">
@@ -1547,6 +1595,15 @@ export default function Dashboard() {
           onClose={() => setIsDeleteModalOpen(false)}
           profile={profile}
           onDeleted={handleAccountDeleted}
+        />
+
+        {/* Delete Product Modal */}
+        <DeleteProductModal
+          isOpen={!!productToDelete}
+          product={productToDelete}
+          isDeleting={isDeletingProduct}
+          onClose={() => setProductToDelete(null)}
+          onConfirmDelete={handleDeleteProduct}
         />
 
       </div>

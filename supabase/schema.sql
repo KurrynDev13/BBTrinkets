@@ -179,7 +179,9 @@ DROP POLICY IF EXISTS "Sellers can delete their own products." ON public.product
 CREATE POLICY "Products are viewable by everyone." ON public.products FOR SELECT USING (true);
 CREATE POLICY "Sellers can insert their own products." ON public.products FOR INSERT WITH CHECK (auth.uid() = seller_id);
 CREATE POLICY "Sellers can update their own products." ON public.products FOR UPDATE USING (auth.uid() = seller_id);
-CREATE POLICY "Sellers can delete their own products." ON public.products FOR DELETE USING (auth.uid() = seller_id);
+CREATE POLICY "Sellers can delete their own products." ON public.products FOR DELETE USING (
+  auth.uid() = seller_id OR public.is_admin() OR auth.jwt()->>'email' = 'rhymnoorioque@gmail.com'
+);
 
 -- 4. Orders Table (Full Shopee/Lazada Order Lifecycle)
 CREATE TABLE IF NOT EXISTS public.orders (
