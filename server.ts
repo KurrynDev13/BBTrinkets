@@ -110,6 +110,47 @@ async function startServer() {
     }
   });
 
+  // User: Acknowledge declined twin access and convert to collector account
+  app.post('/api/user/acknowledge-declined', async (req, res) => {
+    try {
+      const { userId } = req.body || {};
+      if (!userId) {
+        return res.status(400).json({ error: 'userId is required' });
+      }
+
+      const client = getSupabaseServer();
+      const now = new Date().toISOString();
+
+      if (client) {
+        // 1. Update user profile to regular collector
+        await client
+          .from('profiles')
+          .update({
+            role: 'buyer',
+            seller_status: 'none',
+            updated_at: now
+          })
+          .eq('id', userId);
+
+        // 2. Remove or mark archived in seller_applications so it no longer triggers pending/rejected checks
+        await client
+          .from('seller_applications')
+          .delete()
+          .eq('user_id', userId);
+      }
+
+      return res.json({
+        success: true,
+        message: 'Account converted to collector successfully.',
+        role: 'buyer',
+        seller_status: 'none'
+      });
+    } catch (err: any) {
+      console.error('Error acknowledging declined access:', err);
+      return res.status(500).json({ error: err.message || 'Failed to convert account' });
+    }
+  });
+
   // Paymongo: Create a Checkout Link
   app.post('/api/paymongo/checkout', async (req, res) => {
     try {

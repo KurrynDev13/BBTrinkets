@@ -35,7 +35,6 @@ import SellerOrdersSection from '../components/SellerOrdersSection';
 import SellerReviewsSection from '../components/SellerReviewsSection';
 import AdminSellerApplicationsSection from '../components/AdminSellerApplicationsSection';
 import PendingSellerNotice from '../components/PendingSellerNotice';
-import ApplyTwinArtistModal from '../components/ApplyTwinArtistModal';
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -45,7 +44,6 @@ export default function Dashboard() {
   const [applications, setApplications] = useState<SellerApplication[]>([]);
   const [userApplication, setUserApplication] = useState<SellerApplication | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   
   // Seller View Sub-tabs: 'fulfillment' | 'catalog' | 'reviews' | 'applications'
   const [sellerViewTab, setSellerViewTab] = useState<'fulfillment' | 'catalog' | 'reviews' | 'applications'>('fulfillment');
@@ -153,16 +151,19 @@ export default function Dashboard() {
 
       // Check if this is a twin artist applicant needing synchronization
       if (!isFoundingAdmin && activeProfile) {
-        // If already rejected or approved, strictly preserve that status
-        if (activeProfile.seller_status === 'rejected') {
+        // If user is a regular collector (role === 'buyer' && seller_status === 'none'), do NOT force back into seller/applicant
+        if (activeProfile.role === 'buyer' && (!activeProfile.seller_status || activeProfile.seller_status === 'none')) {
+          activeProfile.seller_status = 'none';
+        } else if (activeProfile.seller_status === 'rejected') {
+          // Keep seller_status as rejected so PendingSellerNotice shows confirmation dialog
           activeProfile.role = 'seller';
         } else if (activeProfile.seller_status === 'approved') {
           activeProfile.role = 'seller';
         } else {
-          // Check if user requested twin artist access
+          // Check if user registered with twin artist access request
           const isApplicant = metadata.role === 'seller' || metadata.seller_status === 'pending' || activeProfile.role === 'seller' || activeProfile.seller_status === 'pending';
           
-          if (isApplicant) {
+          if (isApplicant && activeProfile.seller_status !== 'none') {
             activeProfile.role = 'seller';
             activeProfile.seller_status = 'pending';
 
@@ -869,6 +870,69 @@ export default function Dashboard() {
     refreshAllData(updated);
   };
 
+  // Convert rejected / declined Twin Access account to standard Collector account
+  const handleAcknowledgeDeclinedAndConvertToCollector = async () => {
+    if (!profile) return;
+    try {
+      // 1. Try server API route for durable persistence
+      try {
+        await fetch('/api/user/acknowledge-declined', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: profile.id })
+        });
+      } catch (serverErr) {
+        console.warn('Server acknowledge error:', serverErr);
+      }
+
+      // 2. Direct Supabase update
+      const now = new Date().toISOString();
+      await supabase
+        .from('profiles')
+        .update({
+          role: 'buyer',
+          seller_status: 'none',
+          updated_at: now
+        })
+        .eq('id', profile.id);
+
+      // Clean up application record so it no longer flags as rejected
+      await supabase
+        .from('seller_applications')
+        .delete()
+        .eq('user_id', profile.id);
+
+      // Also clean user auth metadata if available
+      try {
+        await supabase.auth.updateUser({
+          data: { role: 'buyer', seller_status: 'none' }
+        });
+      } catch (authErr) {
+        console.warn('Auth metadata update:', authErr);
+      }
+
+      const updatedProfile: Profile = {
+        ...profile,
+        role: 'buyer',
+        seller_status: 'none'
+      };
+
+      setUserApplication(null);
+      setProfile(updatedProfile);
+      await refreshAllData(updatedProfile);
+    } catch (err: any) {
+      console.error('Error acknowledging declination:', err);
+      // Optimistic update
+      const updatedProfile: Profile = {
+        ...profile,
+        role: 'buyer',
+        seller_status: 'none'
+      };
+      setUserApplication(null);
+      setProfile(updatedProfile);
+    }
+  };
+
   // Submit Twin Artist Application from Collector view
   const handleApplyForTwinArtistAccess = async (data: {
     fullName: string;
@@ -1150,6 +1214,7 @@ export default function Dashboard() {
               onRefresh={() => checkUser()}
               onSwitchToBuyerMode={handleSwitchToCollectorMode}
               onUpdateApplication={handleUpdateApplicantProfile}
+              onConfirmDeclinedAndConvertToCollector={handleAcknowledgeDeclinedAndConvertToCollector}
             />
           ) : (
             /* VERIFIED SELLER / ADMIN SELLER DASHBOARD */
@@ -1445,33 +1510,6 @@ export default function Dashboard() {
         ) : (
           /* ---------------- BUYER EXPERIENCE (COLLECTOR) ---------------- */
           <div className="space-y-8">
-            {/* Collector Promo Banner for Twin Artist Access */}
-            {!profile.is_admin && profile.seller_status !== 'approved' && profile.seller_status !== 'pending' && (
-              <div className="bg-gradient-to-r from-teal-900 via-bb-navy to-teal-950 text-white p-6 sm:p-8 rounded-3xl shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border border-teal-800">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-teal-400/20 text-teal-200 border border-teal-400/30 flex items-center gap-1">
-                      <Sparkles size={11} /> Twin Artist Opportunity
-                    </span>
-                  </div>
-                  <h3 className="text-xl sm:text-2xl font-serif font-bold">
-                    Are you a Twin Artist creating handcrafted trinkets & art?
-                  </h3>
-                  <p className="text-xs sm:text-sm text-teal-100/80 max-w-2xl leading-relaxed">
-                    Request authorized access to the B&B Studio Dashboard. Upload pins, acrylic charms, handmade trinkets, and have payments handled automatically with PayMongo.
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => setIsApplyModalOpen(true)}
-                  className="bg-teal-400 hover:bg-teal-300 text-bb-navy font-bold text-xs sm:text-sm px-6 py-3 rounded-full transition-all shadow-md flex items-center gap-2 shrink-0 cursor-pointer"
-                >
-                  <Palette size={16} />
-                  Apply for Twin Artist Access
-                </button>
-              </div>
-            )}
-
             <BuyerOrdersSection
               orders={orders}
               onRefresh={() => refreshAllData(profile)}
@@ -1480,14 +1518,6 @@ export default function Dashboard() {
             />
           </div>
         )}
-
-        {/* Apply for Twin Artist Studio Access Modal */}
-        <ApplyTwinArtistModal
-          isOpen={isApplyModalOpen}
-          onClose={() => setIsApplyModalOpen(false)}
-          profile={profile}
-          onSubmitApplication={handleApplyForTwinArtistAccess}
-        />
 
       </div>
     </div>
