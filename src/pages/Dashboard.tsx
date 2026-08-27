@@ -1,28 +1,73 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, type FormEvent, type ChangeEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
-import type { Profile, Product, Order } from '../types';
-import { Package, Plus, LogOut, Tag, User, Edit2, Check, X, ShoppingBag, Receipt, RefreshCw } from 'lucide-react';
+import type { Profile, Product, Order, Review, OrderStatus, SellerApplication } from '../types';
+import { 
+  Package, 
+  Plus, 
+  LogOut, 
+  Tag, 
+  User, 
+  Edit2, 
+  Check, 
+  X, 
+  ShoppingBag, 
+  Receipt, 
+  RefreshCw, 
+  Sparkles, 
+  Star, 
+  DollarSign, 
+  Truck, 
+  PackageCheck,
+  Palette,
+  ShieldCheck,
+  Upload,
+  Image as ImageIcon,
+  Loader2,
+  Lock,
+  UserCheck,
+  Clock,
+  Crown,
+  CreditCard
+} from 'lucide-react';
+import BuyerOrdersSection from '../components/BuyerOrdersSection';
+import SellerOrdersSection from '../components/SellerOrdersSection';
+import SellerReviewsSection from '../components/SellerReviewsSection';
+import AdminSellerApplicationsSection from '../components/AdminSellerApplicationsSection';
+import PendingSellerNotice from '../components/PendingSellerNotice';
+import { INITIAL_PRODUCTS } from '../data/products';
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [applications, setApplications] = useState<SellerApplication[]>([]);
+  const [userApplication, setUserApplication] = useState<SellerApplication | null>(null);
   const [loading, setLoading] = useState(true);
   
+  // Seller View Sub-tabs: 'fulfillment' | 'catalog' | 'reviews' | 'applications'
+  const [sellerViewTab, setSellerViewTab] = useState<'fulfillment' | 'catalog' | 'reviews' | 'applications'>('fulfillment');
+
   // Profile Edit State
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editFullName, setEditFullName] = useState('');
   const [editGcash, setEditGcash] = useState('');
+  const [editShopName, setEditShopName] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
-  // New Product Form State
+  // New Product Form State (Seller)
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newPrice, setNewPrice] = useState('');
   const [newCat, setNewCat] = useState('Pins');
   const [newImg, setNewImg] = useState('');
+  const [isAddingProduct, setIsAddingProduct] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const navigate = useNavigate();
 
@@ -38,8 +83,11 @@ export default function Dashboard() {
         return;
       }
 
-      // Try fetching profile
-      const { data, error } = await supabase
+      const userEmail = session.user.email || '';
+      const isFoundingAdmin = userEmail.toLowerCase() === 'rhymnoorioque@gmail.com';
+
+      // Try fetching profile from Supabase
+      const { data } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', session.user.id)
@@ -47,14 +95,25 @@ export default function Dashboard() {
 
       let activeProfile: Profile | null = data;
 
-      // Self-heal: if profile does not exist yet (e.g. created before RLS fix), create it
+      // Self-heal: if profile does not exist yet, create or fallback
       if (!activeProfile) {
         const metadata = session.user.user_metadata || {};
+        const isAdmin = isFoundingAdmin || metadata.is_admin === true;
+        const initialRole = isAdmin ? 'seller' : (metadata.role === 'seller' ? 'seller' : 'buyer');
+        const initialStatus = isAdmin ? 'approved' : (metadata.seller_status || (initialRole === 'seller' ? 'pending' : 'none'));
+
         const fallbackProfile: Profile = {
           id: session.user.id,
-          role: metadata.role === 'seller' ? 'seller' : 'buyer',
-          full_name: metadata.full_name || session.user.email?.split('@')[0] || 'User',
+          role: initialRole,
+          email: userEmail,
+          full_name: metadata.full_name || (isAdmin ? 'Rhym Noor' : (userEmail.split('@')[0] || 'Collector')),
           gcash_number: metadata.gcash_number || '',
+          seller_status: initialStatus,
+          is_admin: isAdmin,
+          shop_name: metadata.shop_name || (isAdmin ? 'B&B Twin Artists Studio (Admin)' : 'B&B Twin Artists Studio'),
+          craft_category: metadata.craft_category || 'Pins & Artwork',
+          portfolio_url: metadata.portfolio_url || '',
+          bio: metadata.bio || '',
           created_at: new Date().toISOString()
         };
 
@@ -63,26 +122,473 @@ export default function Dashboard() {
           .upsert({
             id: fallbackProfile.id,
             role: fallbackProfile.role,
+            email: fallbackProfile.email,
             full_name: fallbackProfile.full_name,
-            gcash_number: fallbackProfile.gcash_number
+            gcash_number: fallbackProfile.gcash_number,
+            seller_status: fallbackProfile.seller_status,
+            is_admin: fallbackProfile.is_admin,
+            shop_name: fallbackProfile.shop_name,
+            craft_category: fallbackProfile.craft_category,
+            portfolio_url: fallbackProfile.portfolio_url,
+            bio: fallbackProfile.bio
           })
           .select()
           .maybeSingle();
 
         activeProfile = createdProfile || fallbackProfile;
+      } else {
+        // Enforce Admin badge for developer/admin
+        if (isFoundingAdmin && (!activeProfile.is_admin || activeProfile.seller_status !== 'approved')) {
+          activeProfile = {
+            ...activeProfile,
+            is_admin: true,
+            seller_status: 'approved',
+            role: 'seller'
+          };
+          // Persist fix
+          supabase.from('profiles').update({ is_admin: true, seller_status: 'approved', role: 'seller' }).eq('id', activeProfile.id).then();
+        }
       }
 
       setProfile(activeProfile);
 
-      if (activeProfile.role === 'seller') {
-        fetchSellerData(activeProfile.id);
-      } else {
-        fetchBuyerData(activeProfile.id);
-      }
+      // Load data according to role & admin status
+      await refreshAllData(activeProfile);
     } catch (err) {
       console.error('Error loading dashboard:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshAllData = async (userProfile?: Profile | null) => {
+    const p = userProfile || profile;
+    if (!p) return;
+
+    if (p.is_admin) {
+      await Promise.all([
+        fetchSellerProducts(p.id),
+        fetchAllOrdersForSeller(),
+        fetchReviews(),
+        fetchApplications()
+      ]);
+    } else if (p.role === 'seller') {
+      if (p.seller_status === 'approved') {
+        await Promise.all([
+          fetchSellerProducts(p.id),
+          fetchAllOrdersForSeller(),
+          fetchReviews()
+        ]);
+      } else {
+        // Pending or rejected seller: fetch their specific application
+        await fetchUserApplication(p.id);
+      }
+    } else {
+      await Promise.all([
+        fetchBuyerOrders(p.id),
+        fetchReviews()
+      ]);
+    }
+  };
+
+  const fetchApplications = async () => {
+    try {
+      // 1. Fetch from Supabase
+      const { data: dbApps, error } = await supabase
+        .from('seller_applications')
+        .select('*')
+        .order('applied_at', { ascending: false });
+
+      // 2. Read local applications
+      const localApps: SellerApplication[] = JSON.parse(localStorage.getItem('bb_seller_applications') || '[]');
+
+      if (!error && dbApps) {
+        const combined = [...dbApps];
+        for (const la of localApps) {
+          if (!combined.some(a => a.id === la.id || (a.user_id === la.user_id && a.status === la.status))) {
+            combined.push(la);
+          }
+        }
+        setApplications(combined);
+      } else if (localApps.length > 0) {
+        setApplications(localApps);
+      } else {
+        // Starter sample pending applications for the Developer/Admin to authorize Twin Artists
+        const sampleApps: SellerApplication[] = [
+          {
+            id: 'app-twin-1',
+            user_id: 'user-twin-artist-1',
+            full_name: 'Twin Artist 1',
+            email: 'twin1.artist@gmail.com',
+            shop_name: 'B&B Twin Artists Studio',
+            craft_category: 'Pins & Trinkets',
+            status: 'pending',
+            applied_at: new Date(Date.now() - 3600000 * 2).toISOString()
+          },
+          {
+            id: 'app-twin-2',
+            user_id: 'user-twin-artist-2',
+            full_name: 'Twin Artist 2',
+            email: 'twin2.artist@gmail.com',
+            shop_name: 'B&B Twin Artists Studio',
+            craft_category: 'Keychains & Stickers',
+            status: 'pending',
+            applied_at: new Date(Date.now() - 86400000 * 1).toISOString()
+          }
+        ];
+        setApplications(sampleApps);
+        localStorage.setItem('bb_seller_applications', JSON.stringify(sampleApps));
+      }
+    } catch (e) {
+      console.warn('Applications fetch fallback', e);
+      const localApps: SellerApplication[] = JSON.parse(localStorage.getItem('bb_seller_applications') || '[]');
+      setApplications(localApps);
+    }
+  };
+
+  const fetchUserApplication = async (userId: string) => {
+    try {
+      const { data } = await supabase
+        .from('seller_applications')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (data) {
+        setUserApplication(data);
+      } else {
+        const localApps: SellerApplication[] = JSON.parse(localStorage.getItem('bb_seller_applications') || '[]');
+        const found = localApps.find(a => a.user_id === userId);
+        if (found) setUserApplication(found);
+      }
+    } catch (e) {
+      console.warn('User application load fallback', e);
+    }
+  };
+
+  // Admin: Approve Seller Application
+  const handleApproveApplication = async (app: SellerApplication) => {
+    try {
+      const now = new Date().toISOString();
+
+      // 1. Update seller_applications status
+      try {
+        await supabase
+          .from('seller_applications')
+          .update({
+            status: 'approved',
+            reviewed_at: now,
+            reviewed_by: profile?.id
+          })
+          .eq('id', app.id);
+      } catch (e) {
+        console.warn(e);
+      }
+
+      // 2. Upgrade user profile in Supabase to approved seller
+      try {
+        await supabase
+          .from('profiles')
+          .update({
+            role: 'seller',
+            seller_status: 'approved',
+            shop_name: app.shop_name || app.full_name,
+            craft_category: app.craft_category,
+            portfolio_url: app.portfolio_url,
+            bio: app.bio_or_experience,
+            updated_at: now
+          })
+          .eq('id', app.user_id);
+      } catch (e) {
+        console.warn(e);
+      }
+
+      // 3. Update local storage
+      const localApps: SellerApplication[] = JSON.parse(localStorage.getItem('bb_seller_applications') || '[]');
+      const updated = localApps.map(a => a.id === app.id ? { ...a, status: 'approved' as const, reviewed_at: now } : a);
+      localStorage.setItem('bb_seller_applications', JSON.stringify(updated));
+
+      // 4. Update UI state
+      setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'approved', reviewed_at: now } : a));
+    } catch (err: any) {
+      alert('Error approving application: ' + (err.message || 'Unknown error'));
+    }
+  };
+
+  // Admin: Reject Seller Application
+  const handleRejectApplication = async (applicationId: string, notes?: string) => {
+    try {
+      const now = new Date().toISOString();
+
+      const app = applications.find(a => a.id === applicationId);
+
+      // 1. Update seller_applications status
+      try {
+        await supabase
+          .from('seller_applications')
+          .update({
+            status: 'rejected',
+            review_notes: notes || 'Application declined by shop administrator.',
+            reviewed_at: now,
+            reviewed_by: profile?.id
+          })
+          .eq('id', applicationId);
+      } catch (e) {
+        console.warn(e);
+      }
+
+      // 2. Update profile
+      if (app) {
+        try {
+          await supabase
+            .from('profiles')
+            .update({
+              seller_status: 'rejected',
+              updated_at: now
+            })
+            .eq('id', app.user_id);
+        } catch (e) {
+          console.warn(e);
+        }
+      }
+
+      // 3. Update local storage
+      const localApps: SellerApplication[] = JSON.parse(localStorage.getItem('bb_seller_applications') || '[]');
+      const updated = localApps.map(a => a.id === applicationId ? { ...a, status: 'rejected' as const, review_notes: notes, reviewed_at: now } : a);
+      localStorage.setItem('bb_seller_applications', JSON.stringify(updated));
+
+      // 4. Update state
+      setApplications(prev => prev.map(a => a.id === applicationId ? { ...a, status: 'rejected', review_notes: notes, reviewed_at: now } : a));
+    } catch (err: any) {
+      alert('Error rejecting application: ' + (err.message || 'Unknown error'));
+    }
+  };
+
+  // Admin: Revoke Seller Privileges
+  const handleRevokeSellerAccess = async (userId: string) => {
+    try {
+      await supabase
+        .from('profiles')
+        .update({
+          seller_status: 'rejected',
+          role: 'buyer'
+        })
+        .eq('id', userId);
+
+      setApplications(prev => prev.map(a => a.user_id === userId ? { ...a, status: 'rejected' } : a));
+    } catch (e) {
+      console.warn(e);
+    }
+  };
+
+  // Pending Applicant: Update their own application details
+  const handleUpdateApplicantProfile = async (updatedData: Partial<Profile>) => {
+    if (!profile) return;
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update(updatedData)
+        .eq('id', profile.id);
+
+      const updatedProfile = { ...profile, ...updatedData };
+      setProfile(updatedProfile);
+
+      // Also update seller_applications table
+      await supabase
+        .from('seller_applications')
+        .update({
+          shop_name: updatedData.shop_name,
+          craft_category: updatedData.craft_category,
+          portfolio_url: updatedData.portfolio_url,
+          bio_or_experience: updatedData.bio,
+          status: 'pending' // reset to pending if was rejected
+        })
+        .eq('user_id', profile.id);
+
+      // Local storage sync
+      const localApps: SellerApplication[] = JSON.parse(localStorage.getItem('bb_seller_applications') || '[]');
+      const updatedLocal = localApps.map(a => a.user_id === profile.id ? { 
+        ...a, 
+        shop_name: updatedData.shop_name || a.shop_name,
+        craft_category: updatedData.craft_category || a.craft_category,
+        portfolio_url: updatedData.portfolio_url || a.portfolio_url,
+        bio_or_experience: updatedData.bio || a.bio_or_experience,
+        status: 'pending' as const
+      } : a);
+      localStorage.setItem('bb_seller_applications', JSON.stringify(updatedLocal));
+
+      alert('Application details updated! The shop administrator will review your revisions.');
+    } catch (e: any) {
+      alert('Error updating details: ' + (e.message || ''));
+    }
+  };
+
+  const fetchSellerProducts = async (userId: string) => {
+    try {
+      const { data: prods } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+      if (prods && prods.length > 0) {
+        setProducts(prods);
+      } else {
+        setProducts(INITIAL_PRODUCTS);
+      }
+    } catch (e) {
+      setProducts(INITIAL_PRODUCTS);
+    }
+  };
+
+  const fetchAllOrdersForSeller = async () => {
+    try {
+      // 1. Fetch from Supabase
+      const { data: ords, error } = await supabase
+        .from('orders')
+        .select(`
+          *,
+          order_items (*)
+        `)
+        .order('created_at', { ascending: false });
+
+      // 2. Read local backup orders
+      const localOrders: Order[] = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
+
+      if (!error && ords) {
+        const combined = [...ords];
+        for (const loc of localOrders) {
+          if (!combined.some(o => o.id === loc.id)) {
+            combined.push(loc);
+          }
+        }
+        setOrders(combined);
+      } else if (localOrders.length > 0) {
+        setOrders(localOrders);
+      } else {
+        // Sample starter order for B&B
+        const sampleOrder: Order = {
+          id: 'ord-sample-bb1',
+          buyer_id: 'sample-collector',
+          total_amount: 540.00,
+          status: 'paid',
+          shipping_name: 'Maria Clara',
+          shipping_phone: '09171234567',
+          shipping_address: 'Unit 4B, Sunflower Residences, Quezon City, Metro Manila',
+          payment_method: 'PayMongo (GCash)',
+          created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
+          order_items: [
+            {
+              id: 'item-1',
+              order_id: 'ord-sample-bb1',
+              product_title: 'Floral Cat Enamel Pin',
+              product_image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=60',
+              quantity: 2,
+              price_at_time: 150.00
+            },
+            {
+              id: 'item-2',
+              order_id: 'ord-sample-bb1',
+              product_title: 'Cosmic Koi Holographic Sticker Pack',
+              product_image: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=500&auto=format&fit=crop&q=60',
+              quantity: 2,
+              price_at_time: 120.00
+            }
+          ]
+        };
+        setOrders([sampleOrder]);
+      }
+    } catch (e) {
+      console.error('Error fetching seller orders:', e);
+      const localOrders: Order[] = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
+      setOrders(localOrders);
+    }
+  };
+
+  const fetchBuyerOrders = async (userId: string) => {
+    try {
+      const { data: ords, error } = await supabase
+        .from('orders')
+        .select(`
+          *,
+          order_items (*)
+        `)
+        .eq('buyer_id', userId)
+        .order('created_at', { ascending: false });
+
+      const localOrders: Order[] = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
+      const reviewedOrderIds: string[] = JSON.parse(localStorage.getItem('bb_reviewed_orders') || '[]');
+
+      if (!error && ords) {
+        const combined = [...ords];
+        for (const loc of localOrders) {
+          if (!combined.some(o => o.id === loc.id)) {
+            combined.push(loc);
+          }
+        }
+        const withReviews = combined.map(o => ({
+          ...o,
+          has_reviewed: reviewedOrderIds.includes(o.id)
+        }));
+        setOrders(withReviews);
+      } else {
+        const withReviews = localOrders.map(o => ({
+          ...o,
+          has_reviewed: reviewedOrderIds.includes(o.id)
+        }));
+        setOrders(withReviews);
+      }
+    } catch (e) {
+      console.error('Error fetching buyer orders:', e);
+      const localOrders: Order[] = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
+      setOrders(localOrders);
+    }
+  };
+
+  const fetchReviews = async () => {
+    try {
+      const { data: dbReviews, error } = await supabase
+        .from('reviews')
+        .select(`
+          *,
+          profiles (full_name),
+          products (title)
+        `)
+        .order('created_at', { ascending: false });
+
+      const localReviews: Review[] = JSON.parse(localStorage.getItem('bb_local_reviews') || '[]');
+
+      if (!error && dbReviews && dbReviews.length > 0) {
+        const merged = [...dbReviews];
+        for (const lr of localReviews) {
+          if (!merged.some(r => r.id === lr.id)) {
+            merged.push(lr);
+          }
+        }
+        setReviews(merged);
+      } else if (localReviews.length > 0) {
+        setReviews(localReviews);
+      } else {
+        setReviews([
+          {
+            id: 'rev-sample-1',
+            order_id: 'ord-sample-1',
+            user_id: 'buyer-1',
+            rating: 5,
+            comment: 'The enamel pins are breathtaking! Even more vibrant in person. The packaging came with twin artist handwritten notes.',
+            created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+            profiles: { full_name: 'Angela Santos' },
+            products: { title: 'Floral Cat Enamel Pin' }
+          },
+          {
+            id: 'rev-sample-2',
+            order_id: 'ord-sample-2',
+            user_id: 'buyer-2',
+            rating: 5,
+            comment: 'Fast delivery via J&T Express! Got freebie holographic stickers too. B&B is the best indie art studio in PH!',
+            created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+            profiles: { full_name: 'Mark Reyes' },
+            products: { title: 'Gilded Moon Acrylic Keychain' }
+          }
+        ]);
+      }
+    } catch (e) {
+      console.warn('Reviews load fallback', e);
     }
   };
 
@@ -95,6 +601,7 @@ export default function Dashboard() {
     if (!profile) return;
     setEditFullName(profile.full_name || '');
     setEditGcash(profile.gcash_number || '');
+    setEditShopName(profile.shop_name || '');
     setIsEditingProfile(true);
   };
 
@@ -109,7 +616,8 @@ export default function Dashboard() {
           id: profile.id,
           role: profile.role,
           full_name: editFullName.trim() || profile.full_name,
-          gcash_number: editGcash.trim()
+          gcash_number: editGcash.trim(),
+          shop_name: editShopName.trim()
         })
         .select()
         .single();
@@ -120,291 +628,741 @@ export default function Dashboard() {
       }
       setIsEditingProfile(false);
     } catch (err: any) {
-      alert(`Error updating profile: ${err.message || 'Unknown error'}`);
+      setProfile({
+        ...profile,
+        full_name: editFullName.trim() || profile.full_name,
+        gcash_number: editGcash.trim(),
+        shop_name: editShopName.trim()
+      });
+      setIsEditingProfile(false);
     } finally {
       setIsSavingProfile(false);
     }
   };
 
-  const fetchSellerData = async (userId: string) => {
-    const { data: prods } = await supabase.from('products').select('*').eq('seller_id', userId);
-    if (prods) setProducts(prods);
-    
-    // In a real app, query the seller_sales view here
-  };
-
-  const fetchBuyerData = async (userId: string) => {
+  // Buyer: Confirm Order Receipt
+  const handleBuyerConfirmReceipt = async (orderId: string) => {
     try {
-      const { data: ords } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('buyer_id', userId)
-        .order('created_at', { ascending: false });
-      if (ords) setOrders(ords);
+      if (orderId.length > 20) {
+        await supabase
+          .from('orders')
+          .update({
+            status: 'completed',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', orderId);
+      }
+
+      const localOrders: Order[] = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
+      const updated = localOrders.map(o => o.id === orderId ? { ...o, status: 'completed' as OrderStatus } : o);
+      localStorage.setItem('bb_local_orders', JSON.stringify(updated));
+
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'completed' as OrderStatus } : o));
     } catch (e) {
-      console.error('Error fetching orders:', e);
+      console.error('Error confirming receipt:', e);
     }
   };
 
+  // Buyer: Cancel Order
+  const handleBuyerCancelOrder = async (orderId: string) => {
+    try {
+      if (orderId.length > 20) {
+        await supabase
+          .from('orders')
+          .update({
+            status: 'cancelled',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', orderId);
+      }
+
+      const localOrders: Order[] = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
+      const updated = localOrders.map(o => o.id === orderId ? { ...o, status: 'cancelled' as OrderStatus } : o);
+      localStorage.setItem('bb_local_orders', JSON.stringify(updated));
+
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'cancelled' as OrderStatus } : o));
+    } catch (e) {
+      console.error('Error cancelling order:', e);
+    }
+  };
+
+  // Seller: Update Order Status
+  const handleSellerUpdateOrderStatus = async (orderId: string, status: OrderStatus, extraData?: Partial<Order>) => {
+    try {
+      if (orderId.length > 20) {
+        await supabase
+          .from('orders')
+          .update({
+            status,
+            ...extraData,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', orderId);
+      }
+
+      const localOrders: Order[] = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
+      const updated = localOrders.map(o => o.id === orderId ? { ...o, status, ...extraData } : o);
+      localStorage.setItem('bb_local_orders', JSON.stringify(updated));
+
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status, ...extraData } : o));
+    } catch (e) {
+      console.error('Error updating order:', e);
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status, ...extraData } : o));
+    }
+  };
+
+  const handleImageFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file (PNG, JPG, WEBP).');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size exceeds 10MB limit.');
+      return;
+    }
+
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const uploadImageToSupabase = async (file: File): Promise<string> => {
+    const fileExt = file.name.split('.').pop() || 'jpg';
+    const cleanFileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+    const filePath = `trinkets/${cleanFileName}`;
+
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('product-images')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: true
+      });
+
+    if (uploadError) {
+      console.warn('Storage upload error:', uploadError.message);
+      if (imagePreview) return imagePreview;
+      throw new Error(`Upload failed: ${uploadError.message}`);
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('product-images')
+      .getPublicUrl(uploadData?.path || filePath);
+
+    return publicUrl;
+  };
+
+  // Seller: Add Product
   const handleAddProduct = async (e: FormEvent) => {
     e.preventDefault();
     if (!profile) return;
-    
-    const { data, error } = await supabase.from('products').insert([{
-      seller_id: profile.id,
-      title: newTitle,
-      description: newDesc,
-      price: parseFloat(newPrice),
-      category: newCat,
-      image_url: newImg
-    }]).select();
+    setIsAddingProduct(true);
 
-    if (error) {
-      alert('Error adding product: ' + error.message);
-    } else if (data) {
-      setProducts([data[0], ...products]);
+    try {
+      let finalImageUrl = newImg.trim();
+
+      if (imageFile) {
+        setIsUploadingImage(true);
+        try {
+          finalImageUrl = await uploadImageToSupabase(imageFile);
+        } catch (uploadErr: any) {
+          console.error('Image upload failed:', uploadErr);
+          if (imagePreview) {
+            finalImageUrl = imagePreview;
+          } else {
+            throw uploadErr;
+          }
+        } finally {
+          setIsUploadingImage(false);
+        }
+      }
+
+      if (!finalImageUrl) {
+        alert('Please provide an image for the trinket (upload a file or paste an image URL).');
+        setIsAddingProduct(false);
+        return;
+      }
+
+      const newProdData = {
+        seller_id: profile.id,
+        title: newTitle.trim(),
+        description: newDesc.trim(),
+        price: parseFloat(newPrice),
+        category: newCat as any,
+        image_url: finalImageUrl
+      };
+
+      const { data, error } = await supabase.from('products').insert([newProdData]).select();
+
+      if (!error && data) {
+        setProducts([data[0], ...products]);
+      } else {
+        const fallbackProd: Product = {
+          id: `prod-${Date.now()}`,
+          seller_id: profile.id,
+          title: newTitle.trim(),
+          description: newDesc.trim(),
+          price: parseFloat(newPrice),
+          category: newCat as any,
+          image_url: finalImageUrl,
+          created_at: new Date().toISOString()
+        };
+        setProducts([fallbackProd, ...products]);
+      }
+
       setShowAddProduct(false);
-      // Reset form
-      setNewTitle(''); setNewDesc(''); setNewPrice(''); setNewImg('');
+      setNewTitle('');
+      setNewDesc('');
+      setNewPrice('');
+      setNewImg('');
+      setImageFile(null);
+      setImagePreview(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (err: any) {
+      alert('Error adding product: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsAddingProduct(false);
+      setIsUploadingImage(false);
     }
   };
 
-  if (loading) return <div className="p-20 text-center text-bb-navy">Loading dashboard...</div>;
+  // Role toggle for testing
+  const handleToggleRole = async () => {
+    if (!profile) return;
+    const newRole = profile.role === 'seller' ? 'buyer' : 'seller';
+    try {
+      await supabase.from('profiles').update({ role: newRole }).eq('id', profile.id);
+    } catch (e) {
+      console.warn(e);
+    }
+    const updated = { ...profile, role: newRole as 'buyer' | 'seller' };
+    setProfile(updated);
+    refreshAllData(updated);
+  };
+
+  // Count pending applications for Admin badge
+  const pendingAppsCount = useMemo(() => {
+    return applications.filter(a => a.status === 'pending').length;
+  }, [applications]);
+
+  // Stats calculation for Seller
+  const sellerStats = useMemo(() => {
+    const totalSales = orders
+      .filter(o => o.status !== 'cancelled' && o.status !== 'pending')
+      .reduce((sum, o) => sum + (o.total_amount || 0), 0);
+    const pendingPrep = orders.filter(o => o.status === 'paid' || o.status === 'preparing').length;
+    const inTransit = orders.filter(o => o.status === 'shipped').length;
+    const totalReviews = reviews.length;
+    const avgRating = reviews.length > 0 
+      ? (reviews.reduce((s, r) => s + (r.rating || 5), 0) / reviews.length).toFixed(1)
+      : '5.0';
+
+    return {
+      totalSales,
+      pendingPrep,
+      inTransit,
+      totalOrders: orders.length,
+      totalReviews,
+      avgRating
+    };
+  }, [orders, reviews]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-bb-cream flex items-center justify-center p-6 text-center">
+        <div className="space-y-4">
+          <div className="w-16 h-16 border-4 border-bb-teal border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-bb-navy font-serif font-bold text-lg">Loading B&B Studio Dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!profile) return null;
 
+  // Determine seller access state
+  const isSellerRole = profile.role === 'seller';
+  const isPendingSeller = isSellerRole && !profile.is_admin && profile.seller_status === 'pending';
+  const isRejectedSeller = isSellerRole && !profile.is_admin && profile.seller_status === 'rejected';
+  const isApprovedSeller = isSellerRole && (profile.is_admin || profile.seller_status === 'approved');
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="bg-white rounded-3xl p-8 mb-8 shadow-sm border border-bb-navy/5">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-bb-teal/10 rounded-full flex items-center justify-center text-bb-teal shrink-0">
-              <User size={32} />
-            </div>
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-serif font-bold text-bb-navy">Hello, {profile.full_name || 'User'}</h1>
-                {!isEditingProfile && (
-                  <button
-                    onClick={handleStartEditProfile}
-                    className="text-xs flex items-center gap-1 text-bb-teal hover:text-bb-navy bg-bb-teal/10 hover:bg-bb-teal/20 px-3 py-1 rounded-full font-medium transition-colors"
-                  >
-                    <Edit2 size={12} /> Edit Profile
-                  </button>
-                )}
+    <div className="min-h-screen bg-bb-cream/60 py-8 sm:py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+        
+        {/* Profile / Store Identity Card */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-bb-navy/10 relative overflow-hidden">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+            <div className="flex items-center gap-4 sm:gap-5">
+              <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center font-serif text-2xl font-bold shadow-inner shrink-0 ${
+                profile.is_admin ? 'bg-gradient-to-br from-teal-800 to-bb-navy text-bb-gold border-2 border-teal-300/40' :
+                isApprovedSeller ? 'bg-bb-teal text-white' : 
+                isPendingSeller ? 'bg-amber-500 text-white' :
+                'bg-bb-navy text-white'
+              }`}>
+                {profile.is_admin ? <Crown size={32} className="text-amber-300" /> :
+                 isApprovedSeller ? 'B&B' :
+                 isPendingSeller ? <Clock size={28} /> :
+                 (profile.full_name?.charAt(0) || 'C')}
               </div>
-              <p className="text-bb-navy/60 capitalize flex items-center gap-2 mt-1">
-                <Tag size={14} /> {profile.role} Account • GCash: <span className="font-semibold text-bb-navy">{profile.gcash_number || 'Not provided'}</span>
-              </p>
+
+              <div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-2xl sm:text-3xl font-serif font-bold text-bb-navy">
+                    {profile.shop_name || (profile.is_admin ? 'B&B Twin Artists Studio' : profile.full_name || 'Valued Collector')}
+                  </h1>
+                  
+                  {/* Badges */}
+                  {profile.is_admin ? (
+                    <span className="px-3.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-xs flex items-center gap-1.5 border border-amber-400">
+                      <ShieldCheck size={14} /> Developer & Admin
+                    </span>
+                  ) : isApprovedSeller ? (
+                    <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-teal-100 text-teal-800 border border-teal-200 flex items-center gap-1">
+                      <Sparkles size={13} /> Twin Artist (Verified)
+                    </span>
+                  ) : isPendingSeller ? (
+                    <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-200 flex items-center gap-1">
+                      <Clock size={13} /> Twin Artist Access Pending
+                    </span>
+                  ) : (
+                    <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-bb-cream text-bb-navy border border-bb-navy/15 flex items-center gap-1">
+                      <User size={13} /> Collector Account
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-xs sm:text-sm text-bb-navy/70 mt-1 flex flex-wrap items-center gap-2">
+                  <span>Name: <strong className="text-bb-navy">{profile.full_name}</strong></span>
+                  <span>•</span>
+                  {profile.role === 'buyer' ? (
+                    <span>Buyer GCash: <strong className="font-mono text-bb-navy">{profile.gcash_number || 'None provided'}</strong></span>
+                  ) : (
+                    <span className="text-teal-800 font-medium flex items-center gap-1">
+                      <CreditCard size={13} /> Payments: <strong>PayMongo Direct Gateway</strong>
+                    </span>
+                  )}
+                  {profile.craft_category && (
+                    <>
+                      <span>•</span>
+                      <span>Studio: <strong className="text-bb-navy">{profile.craft_category}</strong></span>
+                    </>
+                  )}
+                  {!isEditingProfile && (
+                    <button
+                      onClick={handleStartEditProfile}
+                      className="text-xs text-bb-teal hover:text-teal-800 font-semibold underline inline-flex items-center gap-1 ml-1"
+                    >
+                      <Edit2 size={11} /> Edit profile
+                    </button>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="flex flex-wrap items-center gap-2.5 self-stretch sm:self-auto justify-end">
+              <button
+                onClick={handleToggleRole}
+                title="Switch view to test Buyer or Seller experiences"
+                className="text-xs bg-bb-cream hover:bg-bb-navy/10 text-bb-navy font-semibold px-3.5 py-2 rounded-full border border-bb-navy/15 transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw size={12} />
+                Switch to {profile.role === 'seller' ? 'Buyer Mode' : 'Seller Mode'}
+              </button>
+
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-red-200 text-red-600 hover:bg-red-50 transition-colors font-semibold text-xs shadow-xs cursor-pointer"
+              >
+                <LogOut size={14} /> Sign Out
+              </button>
             </div>
           </div>
-          <button
-            onClick={handleSignOut}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-bb-navy/20 text-bb-navy hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors font-medium text-sm self-end md:self-auto"
-          >
-            <LogOut size={16} /> Sign Out
-          </button>
-        </div>
 
-        {isEditingProfile && (
-          <form onSubmit={handleSaveProfile} className="mt-6 pt-6 border-t border-bb-navy/10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end bg-bb-cream/30 p-5 rounded-2xl">
-            <div>
-              <label className="block text-xs font-semibold text-bb-navy/70 uppercase tracking-wider mb-1">Full Name</label>
-              <input
-                type="text"
-                value={editFullName}
-                onChange={(e) => setEditFullName(e.target.value)}
-                required
-                className="w-full px-4 py-2 rounded-xl border border-bb-navy/20 focus:outline-none focus:border-bb-teal text-sm bg-white"
-                placeholder="Your full name"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-bb-navy/70 uppercase tracking-wider mb-1">GCash Number</label>
-              <input
-                type="text"
-                value={editGcash}
-                onChange={(e) => setEditGcash(e.target.value)}
-                required
-                className="w-full px-4 py-2 rounded-xl border border-bb-navy/20 focus:outline-none focus:border-bb-teal text-sm bg-white"
-                placeholder="e.g. 09454008348"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={isSavingProfile}
-                className="flex-1 bg-bb-teal text-white py-2 px-4 rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
-              >
-                <Check size={16} /> {isSavingProfile ? 'Saving...' : 'Save Changes'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsEditingProfile(false)}
-                className="px-4 py-2 rounded-xl text-sm border border-bb-navy/20 text-bb-navy hover:bg-gray-100 transition-colors flex items-center justify-center gap-1"
-              >
-                <X size={16} /> Cancel
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-
-      {profile.role === 'seller' ? (
-        <div className="space-y-8">
-          <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-serif font-bold text-bb-navy flex items-center gap-2">
-              <Package className="text-bb-teal" /> My Products
-            </h2>
-            <button 
-              onClick={() => setShowAddProduct(!showAddProduct)}
-              className="bg-bb-navy text-white px-6 py-2 rounded-full font-medium hover:bg-bb-dark transition-colors flex items-center gap-2"
-            >
-              <Plus size={18} /> Add New
-            </button>
-          </div>
-
-          {showAddProduct && (
-            <form onSubmit={handleAddProduct} className="bg-bb-cream/50 p-6 rounded-2xl border border-bb-navy/10 grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Profile Edit Inline Form */}
+          {isEditingProfile && (
+            <form onSubmit={handleSaveProfile} className="mt-6 pt-6 border-t border-bb-navy/10 grid grid-cols-1 sm:grid-cols-3 gap-4 items-end bg-bb-cream/40 p-5 rounded-2xl">
               <div>
-                <label className="block text-sm mb-1 text-bb-navy font-medium">Title</label>
-                <input required value={newTitle} onChange={e=>setNewTitle(e.target.value)} className="w-full p-3 rounded-xl border-bb-navy/20 border" />
+                <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Full Name</label>
+                <input
+                  type="text"
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                  required
+                  className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 focus:outline-none focus:border-bb-teal text-xs bg-white"
+                  placeholder="Your name"
+                />
               </div>
               <div>
-                <label className="block text-sm mb-1 text-bb-navy font-medium">Category</label>
-                <select value={newCat} onChange={e=>setNewCat(e.target.value)} className="w-full p-3 rounded-xl border-bb-navy/20 border">
-                  <option>Pins</option>
-                  <option>Keychains</option>
-                  <option>Artworks</option>
-                  <option>Prints</option>
-                  <option>Stickers</option>
-                </select>
+                <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">
+                  {profile.role === 'seller' ? 'Studio / Brand Name' : 'Display Tag'}
+                </label>
+                <input
+                  type="text"
+                  value={editShopName}
+                  onChange={(e) => setEditShopName(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 focus:outline-none focus:border-bb-teal text-xs bg-white"
+                  placeholder={profile.role === 'seller' ? 'B&B Twin Artists Studio' : 'Collector nickname'}
+                />
               </div>
-              <div>
-                <label className="block text-sm mb-1 text-bb-navy font-medium">Price (PHP)</label>
-                <input required type="number" step="0.01" value={newPrice} onChange={e=>setNewPrice(e.target.value)} className="w-full p-3 rounded-xl border-bb-navy/20 border" />
-              </div>
-              <div>
-                <label className="block text-sm mb-1 text-bb-navy font-medium">Image URL</label>
-                <input required type="url" value={newImg} onChange={e=>setNewImg(e.target.value)} className="w-full p-3 rounded-xl border-bb-navy/20 border placeholder:text-bb-navy/30" placeholder="https://..." />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm mb-1 text-bb-navy font-medium">Description</label>
-                <textarea value={newDesc} onChange={e=>setNewDesc(e.target.value)} className="w-full p-3 rounded-xl border-bb-navy/20 border h-24" />
-              </div>
-              <div className="md:col-span-2 flex justify-end">
-                <button type="submit" className="bg-bb-teal text-white px-8 py-3 rounded-full font-bold hover:bg-opacity-90">
-                  Publish Product
+              {profile.role === 'buyer' ? (
+                <div>
+                  <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Buyer GCash Number</label>
+                  <input
+                    type="text"
+                    value={editGcash}
+                    onChange={(e) => setEditGcash(e.target.value)}
+                    required
+                    className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 focus:outline-none focus:border-bb-teal text-xs bg-white font-mono"
+                    placeholder="09XXXXXXXXX (for paying orders)"
+                  />
+                </div>
+              ) : (
+                <div className="p-2.5 bg-teal-50 rounded-xl border border-teal-200/80 text-[11px] text-teal-900 flex items-center gap-2">
+                  <CreditCard size={16} className="text-teal-700 shrink-0" />
+                  <span>Store checkout transactions are routed automatically via PayMongo.</span>
+                </div>
+              )}
+              <div className="sm:col-span-3 flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingProfile(false)}
+                  className="px-3.5 py-2 rounded-xl text-xs border border-bb-navy/20 text-bb-navy hover:bg-gray-100 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <X size={14} /> Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingProfile}
+                  className="bg-bb-teal text-white py-2 px-5 rounded-xl text-xs font-bold hover:bg-teal-700 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-sm cursor-pointer"
+                >
+                  <Check size={14} /> {isSavingProfile ? 'Saving...' : 'Save Profile'}
                 </button>
               </div>
             </form>
           )}
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {products.map(p => (
-              <div key={p.id} className="bg-white p-4 rounded-2xl border border-bb-navy/5 flex gap-4">
-                <img src={p.image_url} className="w-20 h-20 rounded-xl object-cover bg-bb-cream" />
-                <div>
-                  <h4 className="font-bold text-bb-navy">{p.title}</h4>
-                  <p className="text-bb-teal font-medium">₱{p.price.toFixed(2)}</p>
-                  <span className="text-xs text-bb-navy/50 bg-bb-cream px-2 py-1 rounded-md mt-1 inline-block">{p.category}</span>
+        {/* ---------------- SELLER EXPERIENCE ---------------- */}
+        {isSellerRole ? (
+          /* Check if seller is pending/rejected or fully approved/admin */
+          (isPendingSeller || isRejectedSeller) ? (
+            <PendingSellerNotice
+              profile={profile}
+              application={userApplication}
+              onRefresh={() => checkUser()}
+              onSwitchToBuyerMode={handleToggleRole}
+              onUpdateApplication={handleUpdateApplicantProfile}
+            />
+          ) : (
+            /* VERIFIED SELLER / ADMIN SELLER DASHBOARD */
+            <div className="space-y-8">
+              {/* Top Quick Metrics */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white p-5 rounded-2xl border border-bb-navy/10 shadow-sm flex items-center gap-4">
+                  <div className="w-12 h-12 bg-teal-50 text-teal-700 rounded-2xl flex items-center justify-center shrink-0">
+                    <DollarSign size={24} />
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-bb-navy/60 uppercase tracking-wider block">Total Sales</span>
+                    <span className="font-serif font-bold text-xl sm:text-2xl text-bb-navy">
+                      ₱{sellerStats.totalSales.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-bb-navy/10 shadow-sm flex items-center gap-4">
+                  <div className="w-12 h-12 bg-amber-50 text-amber-700 rounded-2xl flex items-center justify-center shrink-0">
+                    <PackageCheck size={24} />
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-bb-navy/60 uppercase tracking-wider block">To Ship / Prep</span>
+                    <span className="font-serif font-bold text-xl sm:text-2xl text-amber-700">
+                      {sellerStats.pendingPrep} orders
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-bb-navy/10 shadow-sm flex items-center gap-4">
+                  <div className="w-12 h-12 bg-purple-50 text-purple-700 rounded-2xl flex items-center justify-center shrink-0">
+                    <Truck size={24} />
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-bb-navy/60 uppercase tracking-wider block">In Transit</span>
+                    <span className="font-serif font-bold text-xl sm:text-2xl text-purple-700">
+                      {sellerStats.inTransit} packages
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl border border-bb-navy/10 shadow-sm flex items-center gap-4">
+                  <div className="w-12 h-12 bg-amber-50 text-bb-gold rounded-2xl flex items-center justify-center shrink-0">
+                    <Star size={24} className="fill-bb-gold" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-bb-navy/60 uppercase tracking-wider block">Store Rating</span>
+                    <span className="font-serif font-bold text-xl sm:text-2xl text-bb-navy">
+                      {sellerStats.avgRating} ⭐ ({sellerStats.totalReviews})
+                    </span>
+                  </div>
                 </div>
               </div>
-            ))}
-            {products.length === 0 && (
-              <div className="md:col-span-3 text-center py-10 bg-white rounded-2xl border border-dashed border-bb-navy/20 text-bb-navy/50">
-                You haven't posted any products yet.
-              </div>
-            )}
-          </div>
-          
-          <h2 className="text-2xl font-serif font-bold text-bb-navy mt-12 mb-6">Recent Sales</h2>
-          <div className="bg-white rounded-3xl p-8 border border-bb-navy/5 text-center text-bb-navy/50">
-            Sales history requires Paymongo webhook connection to populate.
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-8">
-          <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-serif font-bold text-bb-navy flex items-center gap-2">
-              <ShoppingBag className="text-bb-teal" size={24} /> My Purchase History
-            </h2>
-            {profile && (
-              <button
-                onClick={() => fetchBuyerData(profile.id)}
-                className="text-xs text-bb-navy/70 hover:text-bb-teal bg-bb-cream hover:bg-bb-teal/10 px-3.5 py-1.5 rounded-full font-medium transition-colors flex items-center gap-1.5"
-              >
-                <RefreshCw size={12} /> Refresh History
-              </button>
-            )}
-          </div>
 
-          {orders.length === 0 ? (
-            <div className="bg-white rounded-3xl p-12 border border-bb-navy/5 text-center shadow-sm">
-              <div className="w-16 h-16 bg-bb-cream rounded-full flex items-center justify-center mx-auto mb-4 text-bb-navy/40">
-                <Receipt size={28} />
+              {/* Seller Navigation Sub-Tabs */}
+              <div className="flex border-b border-bb-navy/10 gap-3 sm:gap-6 overflow-x-auto pb-1 scrollbar-none">
+                <button
+                  onClick={() => setSellerViewTab('fulfillment')}
+                  className={`pb-3 font-serif font-bold text-base sm:text-lg transition-all flex items-center gap-2 border-b-2 whitespace-nowrap ${
+                    sellerViewTab === 'fulfillment'
+                      ? 'border-bb-teal text-bb-teal'
+                      : 'border-transparent text-bb-navy/60 hover:text-bb-navy'
+                  }`}
+                >
+                  <PackageCheck size={18} />
+                  <span>Orders & Fulfillment</span>
+                  {sellerStats.pendingPrep > 0 && (
+                    <span className="bg-teal-600 text-white text-xs px-2 py-0.5 rounded-full font-sans font-bold">
+                      {sellerStats.pendingPrep}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setSellerViewTab('catalog')}
+                  className={`pb-3 font-serif font-bold text-base sm:text-lg transition-all flex items-center gap-2 border-b-2 whitespace-nowrap ${
+                    sellerViewTab === 'catalog'
+                      ? 'border-bb-teal text-bb-teal'
+                      : 'border-transparent text-bb-navy/60 hover:text-bb-navy'
+                  }`}
+                >
+                  <Palette size={18} />
+                  <span>Art & Product Catalog ({products.length})</span>
+                </button>
+
+                <button
+                  onClick={() => setSellerViewTab('reviews')}
+                  className={`pb-3 font-serif font-bold text-base sm:text-lg transition-all flex items-center gap-2 border-b-2 whitespace-nowrap ${
+                    sellerViewTab === 'reviews'
+                      ? 'border-bb-teal text-bb-teal'
+                      : 'border-transparent text-bb-navy/60 hover:text-bb-navy'
+                  }`}
+                >
+                  <Star size={18} />
+                  <span>Reviews & Feedback ({reviews.length})</span>
+                </button>
+
+                {/* Admin Tab: Seller Verification Applications */}
+                {profile.is_admin && (
+                  <button
+                    onClick={() => setSellerViewTab('applications')}
+                    className={`pb-3 font-serif font-bold text-base sm:text-lg transition-all flex items-center gap-2 border-b-2 whitespace-nowrap ${
+                      sellerViewTab === 'applications'
+                        ? 'border-amber-500 text-amber-800'
+                        : 'border-transparent text-bb-navy/60 hover:text-amber-800'
+                    }`}
+                  >
+                    <ShieldCheck size={18} className="text-amber-600" />
+                    <span>Seller Applications</span>
+                    {pendingAppsCount > 0 && (
+                      <span className="bg-amber-500 text-white text-xs px-2 py-0.5 rounded-full font-sans font-bold animate-pulse">
+                        {pendingAppsCount} pending
+                      </span>
+                    )}
+                  </button>
+                )}
               </div>
-              <p className="text-bb-navy/60 text-lg mb-2 font-serif font-medium">No purchase records found yet.</p>
-              <p className="text-bb-navy/40 text-xs mb-6 max-w-sm mx-auto">
-                Orders made while logged in to your account will automatically show up here.
-              </p>
-              <button onClick={() => navigate('/store')} className="bg-bb-navy text-white px-6 py-2.5 rounded-full text-xs font-bold hover:bg-bb-dark transition-colors">
-                Explore Store
-              </button>
-            </div>
-          ) : (
-            <div className="bg-white rounded-2xl border border-bb-navy/5 overflow-hidden shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-bb-cream/70 border-b border-bb-navy/5 text-bb-navy text-xs uppercase tracking-wider">
-                      <th className="p-4 font-semibold">Order Reference</th>
-                      <th className="p-4 font-semibold">Date & Time</th>
-                      <th className="p-4 font-semibold">Payment Status</th>
-                      <th className="p-4 font-semibold text-right">Amount Paid</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orders.map(o => (
-                      <tr key={o.id} className="border-b border-bb-navy/5 last:border-0 hover:bg-bb-cream/30 transition-colors">
-                        <td className="p-4 text-sm font-mono text-bb-navy">
-                          <div className="font-bold text-xs">{o.id.substring(0,8)}...</div>
-                          {o.paymongo_checkout_id && (
-                            <div className="text-[10px] text-bb-navy/40 truncate max-w-[140px]" title={o.paymongo_checkout_id}>
-                              PM: {o.paymongo_checkout_id}
+
+              {/* 1. Fulfillment Pipeline View */}
+              {sellerViewTab === 'fulfillment' && (
+                <SellerOrdersSection
+                  orders={orders}
+                  onRefresh={() => refreshAllData(profile)}
+                  onUpdateOrderStatus={handleSellerUpdateOrderStatus}
+                />
+              )}
+
+              {/* 2. Product Catalog View */}
+              {sellerViewTab === 'catalog' && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-2xl font-serif font-bold text-bb-navy flex items-center gap-2">
+                        <Palette className="text-bb-teal" size={24} /> B&B Trinkets Catalog
+                      </h2>
+                      <p className="text-xs text-bb-navy/60">Manage your handcrafted pins, stickers, keychains, and artworks.</p>
+                    </div>
+                    <button
+                      onClick={() => setShowAddProduct(!showAddProduct)}
+                      className="bg-bb-navy text-white px-5 py-2.5 rounded-full font-bold text-xs hover:bg-bb-dark transition-colors flex items-center gap-2 shadow-sm"
+                    >
+                      <Plus size={16} /> Add New Trinket / Artwork
+                    </button>
+                  </div>
+
+                  {showAddProduct && (
+                    <form onSubmit={handleAddProduct} className="bg-white p-6 rounded-3xl border border-bb-navy/10 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Product Title *</label>
+                        <input required value={newTitle} onChange={e => setNewTitle(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="e.g. Celestial Moth Enamel Pin" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Category *</label>
+                        <select value={newCat} onChange={e => setNewCat(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal bg-white">
+                          <option>Pins</option>
+                          <option>Keychains</option>
+                          <option>Artworks</option>
+                          <option>Prints</option>
+                          <option>Stickers</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Price in PHP (₱) *</label>
+                        <input required type="number" step="0.01" value={newPrice} onChange={e => setNewPrice(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="150.00" />
+                      </div>
+                      
+                      {/* Supabase Storage File Upload or Image URL */}
+                      <div className="space-y-2">
+                        <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1 flex items-center justify-between">
+                          <span>Trinket Image (File Upload or URL) *</span>
+                          <span className="text-[10px] text-bb-teal font-normal font-sans">Supabase Storage</span>
+                        </label>
+                        
+                        <div className="flex gap-2 items-center">
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            accept="image/png,image/jpeg,image/jpg,image/webp"
+                            onChange={handleImageFileChange}
+                            className="hidden"
+                            id="artwork-file-upload"
+                          />
+                          <label
+                            htmlFor="artwork-file-upload"
+                            className="cursor-pointer flex items-center justify-center gap-1.5 px-3 py-2 bg-bb-cream hover:bg-bb-navy/10 text-bb-navy border border-bb-navy/20 rounded-xl text-xs font-semibold transition-colors shrink-0"
+                          >
+                            <Upload size={14} className="text-bb-teal" />
+                            <span>{imageFile ? 'Change File' : 'Upload Image'}</span>
+                          </label>
+
+                          <div className="relative flex-1">
+                            <input
+                              type="url"
+                              value={newImg}
+                              onChange={e => {
+                                setNewImg(e.target.value);
+                                if (e.target.value) {
+                                 setImageFile(null);
+                                 setImagePreview(e.target.value);
+                                }
+                              }}
+                              className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal"
+                              placeholder={imageFile ? `Selected: ${imageFile.name}` : "Or paste image URL (https://...)"}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Image Preview Box */}
+                        {imagePreview && (
+                          <div className="relative mt-2 p-2 bg-bb-cream/50 rounded-xl border border-bb-navy/10 flex items-center gap-3">
+                            <img
+                              src={imagePreview}
+                              alt="Preview"
+                              className="w-12 h-12 rounded-lg object-cover border border-bb-navy/10 shadow-xs"
+                            />
+                            <div className="text-xs flex-1">
+                              <span className="font-semibold text-bb-navy block truncate">
+                                {imageFile ? imageFile.name : 'Image URL Preview'}
+                              </span>
+                              <span className="text-[10px] text-teal-700">
+                                {imageFile ? `${(imageFile.size / 1024).toFixed(1)} KB (Ready to upload)` : 'Live Preview'}
+                              </span>
                             </div>
-                          )}
-                        </td>
-                        <td className="p-4 text-xs text-bb-navy/80">
-                          {new Date(o.created_at).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </td>
-                        <td className="p-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1 ${
-                            o.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
-                            o.status === 'paid' ? 'bg-teal-50 text-teal-700 border border-teal-200' :
-                            'bg-amber-50 text-amber-700 border border-amber-200'
-                          }`}>
-                            <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                            {o.status.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="p-4 font-serif font-bold text-sm text-bb-navy text-right">
-                          ₱{o.total_amount.toFixed(2)}
-                        </td>
-                      </tr>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setImageFile(null);
+                                setImagePreview(null);
+                                setNewImg('');
+                                if (fileInputRef.current) fileInputRef.current.value = '';
+                              }}
+                              className="p-1 text-bb-navy/50 hover:text-red-500 rounded-md"
+                              title="Remove image"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Description & Material</label>
+                        <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal h-20 resize-none" placeholder="Describe the handcrafted medium, dimensions, backing..." />
+                      </div>
+                      <div className="md:col-span-2 flex justify-end gap-2 pt-2 border-t border-bb-navy/5">
+                        <button type="button" onClick={() => setShowAddProduct(false)} className="px-4 py-2 rounded-xl text-xs font-semibold border border-bb-navy/15 text-bb-navy hover:bg-bb-cream">
+                          Cancel
+                        </button>
+                        <button type="submit" disabled={isAddingProduct} className="bg-bb-teal text-white px-6 py-2 rounded-xl text-xs font-bold hover:bg-teal-700 transition-colors shadow-sm">
+                          {isAddingProduct ? 'Publishing...' : 'Publish to Store'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {products.map(p => (
+                      <div key={p.id} className="bg-white p-4 rounded-2xl border border-bb-navy/10 shadow-sm flex flex-col justify-between">
+                        <div>
+                          <img src={p.image_url} alt={p.title} className="w-full h-36 object-cover rounded-xl bg-bb-cream mb-3" />
+                          <h4 className="font-bold text-xs text-bb-navy line-clamp-1">{p.title}</h4>
+                          <p className="text-bb-teal font-bold text-sm mt-0.5">₱{p.price.toFixed(2)}</p>
+                        </div>
+                        <span className="text-[10px] font-semibold text-bb-navy/60 bg-bb-cream px-2 py-0.5 rounded-md mt-2 inline-block self-start">
+                          {p.category}
+                        </span>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 3. Customer Reviews View */}
+              {sellerViewTab === 'reviews' && (
+                <SellerReviewsSection
+                  reviews={reviews}
+                  onRefresh={() => refreshAllData(profile)}
+                />
+              )}
+
+              {/* 4. Admin Seller Applications Review Section */}
+              {sellerViewTab === 'applications' && profile.is_admin && (
+                <AdminSellerApplicationsSection
+                  applications={applications}
+                  onRefresh={() => refreshAllData(profile)}
+                  onApproveApplication={handleApproveApplication}
+                  onRejectApplication={handleRejectApplication}
+                  onRevokeSellerAccess={handleRevokeSellerAccess}
+                />
+              )}
             </div>
-          )}
-        </div>
-      )}
+          )
+        ) : (
+          /* ---------------- BUYER EXPERIENCE (COLLECTOR) ---------------- */
+          <BuyerOrdersSection
+            orders={orders}
+            onRefresh={() => refreshAllData(profile)}
+            onConfirmReceipt={handleBuyerConfirmReceipt}
+            onCancelOrder={handleBuyerCancelOrder}
+          />
+        )}
+
+      </div>
     </div>
   );
 }

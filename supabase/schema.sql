@@ -1,125 +1,270 @@
--- B&B Trinkets Database Schema
+-- ==============================================================================
+-- B&B TRINKETS COMPLETE SUPABASE SETUP SCRIPT (DATABASE SCHEMA & STORAGE BUCKET)
+-- ==============================================================================
+-- Run this in your Supabase Project SQL Editor (https://supabase.com/dashboard/project/_/sql)
 
--- 1. Profiles Table (extends auth.users)
-CREATE TABLE IF NOT EXISTS profiles (
+-- 1. Enable UUID Extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 2. Profiles Table (Buyer, Seller & Admin accounts linked to Supabase Auth)
+CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   role TEXT CHECK (role IN ('buyer', 'seller')) NOT NULL DEFAULT 'buyer',
   full_name TEXT,
+  email TEXT,
   gcash_number TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+  seller_status TEXT CHECK (seller_status IN ('approved', 'pending', 'rejected', 'none')) NOT NULL DEFAULT 'none',
+  is_admin BOOLEAN NOT NULL DEFAULT false,
+  shop_name TEXT,
+  craft_category TEXT,
+  portfolio_url TEXT,
+  bio TEXT,
+  application_note TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Enable RLS for profiles
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public profiles are viewable by everyone." ON profiles;
-DROP POLICY IF EXISTS "Users can insert their own profile." ON profiles;
-DROP POLICY IF EXISTS "Users can update own profile." ON profiles;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone." ON public.profiles;
+DROP POLICY IF EXISTS "Users can insert their own profile." ON public.profiles;
+DROP POLICY IF EXISTS "Users can update own profile." ON public.profiles;
+DROP POLICY IF EXISTS "Admins can update all profiles." ON public.profiles;
 
-CREATE POLICY "Public profiles are viewable by everyone." ON profiles FOR SELECT USING (true);
-CREATE POLICY "Users can insert their own profile." ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
-CREATE POLICY "Users can update own profile." ON profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Public profiles are viewable by everyone." ON public.profiles FOR SELECT USING (true);
+CREATE POLICY "Users can insert their own profile." ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "Users can update own profile." ON public.profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Admins can update all profiles." ON public.profiles FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.is_admin = true)
+);
 
--- Function & Trigger to automatically create a profile on signup
+-- Trigger to automatically create a profile on new Supabase signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
+DECLARE
+  v_role TEXT;
+  v_seller_status TEXT;
+  v_is_admin BOOLEAN;
 BEGIN
-  INSERT INTO public.profiles (id, full_name, role, gcash_number)
+  v_role := COALESCE(new.raw_user_meta_data->>'role', 'buyer');
+  
+  -- The first/founding seller (rhymnoorioque@gmail.com) is automatically verified admin seller
+  IF new.email = 'rhymnoorioque@gmail.com' OR (new.raw_user_meta_data->>'is_admin')::boolean = true THEN
+    v_role := 'seller';
+    v_seller_status := 'approved';
+    v_is_admin := true;
+  ELSIF v_role = 'seller' THEN
+    -- All other new sellers start with pending application status until admin approves
+    v_seller_status := 'pending';
+    v_is_admin := false;
+  ELSE
+    v_seller_status := 'none';
+    v_is_admin := false;
+  END IF;
+
+  INSERT INTO public.profiles (
+    id, full_name, email, role, gcash_number, seller_status, is_admin, shop_name, craft_category, portfolio_url, bio
+  )
   VALUES (
     new.id,
     COALESCE(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
-    COALESCE(new.raw_user_meta_data->>'role', 'buyer'),
-    COALESCE(new.raw_user_meta_data->>'gcash_number', '')
+    new.email,
+    v_role,
+    COALESCE(new.raw_user_meta_data->>'gcash_number', ''),
+    v_seller_status,
+    v_is_admin,
+    COALESCE(new.raw_user_meta_data->>'shop_name', ''),
+    COALESCE(new.raw_user_meta_data->>'craft_category', ''),
+    COALESCE(new.raw_user_meta_data->>'portfolio_url', ''),
+    COALESCE(new.raw_user_meta_data->>'bio', '')
   )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    full_name = COALESCE(EXCLUDED.full_name, public.profiles.full_name);
+
+  -- If signing up as a seller and not founding admin, record in seller_applications table
+  IF v_role = 'seller' AND NOT v_is_admin THEN
+    INSERT INTO public.seller_applications (
+      user_id, full_name, email, gcash_number, shop_name, craft_category, portfolio_url, bio_or_experience, status
+    )
+    VALUES (
+      new.id,
+      COALESCE(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+      new.email,
+      COALESCE(new.raw_user_meta_data->>'gcash_number', ''),
+      COALESCE(new.raw_user_meta_data->>'shop_name', ''),
+      COALESCE(new.raw_user_meta_data->>'craft_category', 'Pins & Art'),
+      COALESCE(new.raw_user_meta_data->>'portfolio_url', ''),
+      COALESCE(new.raw_user_meta_data->>'bio', ''),
+      'pending'
+    );
+  END IF;
+
   RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Trigger execution on auth.users
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- 2. Products Table
-CREATE TABLE products (
+-- 2.5 Seller Applications Table (For Admin / Founding Seller to review and approve)
+CREATE TABLE IF NOT EXISTS public.seller_applications (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  seller_id UUID REFERENCES profiles(id) NOT NULL,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  full_name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  gcash_number TEXT NOT NULL,
+  shop_name TEXT,
+  craft_category TEXT,
+  portfolio_url TEXT,
+  bio_or_experience TEXT,
+  status TEXT CHECK (status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending' NOT NULL,
+  review_notes TEXT,
+  applied_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  reviewed_at TIMESTAMP WITH TIME ZONE,
+  reviewed_by UUID REFERENCES public.profiles(id)
+);
+
+ALTER TABLE public.seller_applications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Applicants can view their own application." ON public.seller_applications;
+DROP POLICY IF EXISTS "Applicants can create applications." ON public.seller_applications;
+DROP POLICY IF EXISTS "Admins can view and manage all applications." ON public.seller_applications;
+
+CREATE POLICY "Applicants can view their own application." ON public.seller_applications FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Applicants can create applications." ON public.seller_applications FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Admins can view and manage all applications." ON public.seller_applications FOR ALL USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND (profiles.is_admin = true OR profiles.role = 'seller'))
+);
+
+-- 3. Products Table (Artworks, Prints, Pins, Keychains, Stickers)
+CREATE TABLE IF NOT EXISTS public.products (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  seller_id UUID REFERENCES public.profiles(id) NOT NULL,
   title TEXT NOT NULL,
   description TEXT,
   price DECIMAL(10, 2) NOT NULL,
-  category TEXT CHECK (category IN ('Pins', 'Keychains', 'Artworks', 'Prints')),
+  category TEXT CHECK (category IN ('Pins', 'Keychains', 'Artworks', 'Prints', 'Stickers')),
   image_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Enable RLS for products
-ALTER TABLE products ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Products are viewable by everyone." ON products FOR SELECT USING (true);
-CREATE POLICY "Sellers can insert their own products." ON products FOR INSERT WITH CHECK (auth.uid() = seller_id);
-CREATE POLICY "Sellers can update their own products." ON products FOR UPDATE USING (auth.uid() = seller_id);
-CREATE POLICY "Sellers can delete their own products." ON products FOR DELETE USING (auth.uid() = seller_id);
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Products are viewable by everyone." ON public.products;
+DROP POLICY IF EXISTS "Sellers can insert their own products." ON public.products;
+DROP POLICY IF EXISTS "Sellers can update their own products." ON public.products;
+DROP POLICY IF EXISTS "Sellers can delete their own products." ON public.products;
 
--- 3. Orders Table
-CREATE TABLE orders (
+CREATE POLICY "Products are viewable by everyone." ON public.products FOR SELECT USING (true);
+CREATE POLICY "Sellers can insert their own products." ON public.products FOR INSERT WITH CHECK (auth.uid() = seller_id);
+CREATE POLICY "Sellers can update their own products." ON public.products FOR UPDATE USING (auth.uid() = seller_id);
+CREATE POLICY "Sellers can delete their own products." ON public.products FOR DELETE USING (auth.uid() = seller_id);
+
+-- 4. Orders Table (Full Shopee/Lazada Order Lifecycle)
+CREATE TABLE IF NOT EXISTS public.orders (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  buyer_id UUID REFERENCES profiles(id) NOT NULL,
+  buyer_id UUID REFERENCES public.profiles(id) NOT NULL,
   total_amount DECIMAL(10, 2) NOT NULL,
-  status TEXT CHECK (status IN ('pending', 'paid', 'shipped', 'completed', 'cancelled')) DEFAULT 'pending',
+  status TEXT CHECK (status IN ('pending', 'paid', 'preparing', 'shipped', 'completed', 'cancelled')) DEFAULT 'pending',
   paymongo_checkout_id TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+  shipping_name TEXT,
+  shipping_phone TEXT,
+  shipping_address TEXT,
+  payment_method TEXT,
+  courier TEXT,
+  tracking_number TEXT,
+  seller_notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Enable RLS for orders
-ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Buyers can view their own orders." ON orders FOR SELECT USING (auth.uid() = buyer_id);
-CREATE POLICY "Buyers can create their own orders." ON orders FOR INSERT WITH CHECK (auth.uid() = buyer_id);
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Buyers can view their own orders." ON public.orders;
+DROP POLICY IF EXISTS "Buyers can create their own orders." ON public.orders;
+DROP POLICY IF EXISTS "Buyers can update their own orders." ON public.orders;
+DROP POLICY IF EXISTS "Sellers can view all orders." ON public.orders;
+DROP POLICY IF EXISTS "Sellers can update order status." ON public.orders;
 
--- 4. Order Items Table
-CREATE TABLE order_items (
+CREATE POLICY "Buyers can view their own orders." ON public.orders FOR SELECT USING (auth.uid() = buyer_id);
+CREATE POLICY "Buyers can create their own orders." ON public.orders FOR INSERT WITH CHECK (auth.uid() = buyer_id);
+CREATE POLICY "Buyers can update their own orders." ON public.orders FOR UPDATE USING (auth.uid() = buyer_id);
+
+CREATE POLICY "Sellers can view all orders." ON public.orders FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'seller')
+);
+CREATE POLICY "Sellers can update order status." ON public.orders FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'seller')
+);
+
+-- 5. Order Items Table
+CREATE TABLE IF NOT EXISTS public.order_items (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
-  product_id UUID REFERENCES products(id),
+  order_id UUID REFERENCES public.orders(id) ON DELETE CASCADE,
+  product_id UUID REFERENCES public.products(id) ON DELETE SET NULL,
+  product_title TEXT NOT NULL,
+  product_image TEXT,
   quantity INTEGER NOT NULL DEFAULT 1,
   price_at_time DECIMAL(10, 2) NOT NULL
 );
 
--- Enable RLS for order_items
-ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Buyers can view their own order items." ON order_items FOR SELECT USING (
-  EXISTS (SELECT 1 FROM orders WHERE orders.id = order_items.order_id AND orders.buyer_id = auth.uid())
+ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Buyers can view their own order items." ON public.order_items;
+DROP POLICY IF EXISTS "Buyers can insert their own order items." ON public.order_items;
+DROP POLICY IF EXISTS "Sellers can view order items." ON public.order_items;
+
+CREATE POLICY "Buyers can view their own order items." ON public.order_items FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.orders WHERE orders.id = order_items.order_id AND orders.buyer_id = auth.uid())
 );
-CREATE POLICY "Buyers can insert their own order items." ON order_items FOR INSERT WITH CHECK (
-  EXISTS (SELECT 1 FROM orders WHERE orders.id = order_items.order_id AND orders.buyer_id = auth.uid())
+CREATE POLICY "Buyers can insert their own order items." ON public.order_items FOR INSERT WITH CHECK (
+  EXISTS (SELECT 1 FROM public.orders WHERE orders.id = order_items.order_id AND orders.buyer_id = auth.uid())
+);
+CREATE POLICY "Sellers can view order items." ON public.order_items FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'seller')
 );
 
--- 5. Reviews Table
-CREATE TABLE reviews (
+-- 6. Reviews Table (1-5 Star ratings & comments)
+CREATE TABLE IF NOT EXISTS public.reviews (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES profiles(id) NOT NULL,
+  product_id UUID REFERENCES public.products(id) ON DELETE CASCADE,
+  order_id UUID REFERENCES public.orders(id) ON DELETE SET NULL,
+  user_id UUID REFERENCES public.profiles(id) NOT NULL,
   rating INTEGER CHECK (rating >= 1 AND rating <= 5) NOT NULL,
   comment TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Enable RLS for reviews
-ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Reviews are viewable by everyone." ON reviews FOR SELECT USING (true);
-CREATE POLICY "Authenticated users can create reviews." ON reviews FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update their own reviews." ON reviews FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete their own reviews." ON reviews FOR DELETE USING (auth.uid() = user_id);
+ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Reviews are viewable by everyone." ON public.reviews;
+DROP POLICY IF EXISTS "Authenticated users can create reviews." ON public.reviews;
+DROP POLICY IF EXISTS "Users can update their own reviews." ON public.reviews;
+DROP POLICY IF EXISTS "Users can delete their own reviews." ON public.reviews;
 
--- Create a view for seller sales history
-CREATE OR REPLACE VIEW seller_sales AS
-SELECT 
-  o.id AS order_id,
-  o.status,
-  o.created_at,
-  oi.quantity,
-  oi.price_at_time,
-  p.title AS product_title,
-  p.seller_id
-FROM orders o
-JOIN order_items oi ON o.id = oi.order_id
-JOIN products p ON oi.product_id = p.id;
+CREATE POLICY "Reviews are viewable by everyone." ON public.reviews FOR SELECT USING (true);
+CREATE POLICY "Authenticated users can create reviews." ON public.reviews FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own reviews." ON public.reviews FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own reviews." ON public.reviews FOR DELETE USING (auth.uid() = user_id);
+
+-- ==============================================================================
+-- 7. SUPABASE STORAGE BUCKET FOR ARTWORKS & TRINKET IMAGES ('product-images')
+-- ==============================================================================
+-- Create the public bucket if not already present
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('product-images', 'product-images', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- Storage Policies for 'product-images' bucket
+DROP POLICY IF EXISTS "Product images are publicly accessible." ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated users can upload product images." ON storage.objects;
+DROP POLICY IF EXISTS "Sellers can delete and update product images." ON storage.objects;
+
+CREATE POLICY "Product images are publicly accessible."
+ON storage.objects FOR SELECT
+USING (bucket_id = 'product-images');
+
+CREATE POLICY "Authenticated users can upload product images."
+ON storage.objects FOR INSERT
+WITH CHECK (bucket_id = 'product-images' AND auth.role() = 'authenticated');
+
+CREATE POLICY "Sellers can delete and update product images."
+ON storage.objects FOR ALL
+USING (bucket_id = 'product-images' AND auth.role() = 'authenticated');

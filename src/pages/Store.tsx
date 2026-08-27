@@ -40,7 +40,7 @@ interface CheckoutData {
   description: string;
   checkoutUrl?: string;
   linkId?: string;
-  items: { title: string; quantity: number; price: number }[];
+  items: { title: string; quantity: number; price: number; image_url?: string; product_id?: string }[];
 }
 
 export default function Store() {
@@ -256,32 +256,75 @@ export default function Store() {
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData?.session?.user?.id || null;
 
+      const orderPayload = {
+        id: `ord-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        buyer_id: userId || 'guest-collector',
+        total_amount: checkoutModal?.totalAmount || 0,
+        status: (method.includes('Pending') ? 'pending' : 'paid') as any,
+        paymongo_checkout_id: paymongoId || null,
+        shipping_name: buyerName || sessionData?.session?.user?.user_metadata?.full_name || 'Valued Collector',
+        shipping_phone: buyerPhone || sessionData?.session?.user?.user_metadata?.gcash_number || '',
+        shipping_address: buyerAddress || 'Standard Delivery',
+        payment_method: method,
+        created_at: new Date().toISOString()
+      };
+
+      // 1. Try inserting to Supabase if logged in
       if (userId && checkoutModal) {
-        // Insert main order
         const { data: createdOrder, error: orderErr } = await supabase
           .from('orders')
           .insert({
             buyer_id: userId,
             total_amount: checkoutModal.totalAmount,
-            status: 'paid',
-            paymongo_checkout_id: paymongoId || null
+            status: method.includes('Pending') ? 'pending' : 'paid',
+            paymongo_checkout_id: paymongoId || null,
+            shipping_name: orderPayload.shipping_name,
+            shipping_phone: orderPayload.shipping_phone,
+            shipping_address: orderPayload.shipping_address,
+            payment_method: method
           })
           .select()
           .single();
 
-        if (!orderErr && createdOrder) {
+        const orderIdToUse = (!orderErr && createdOrder?.id) ? createdOrder.id : orderPayload.id;
+
+        if (checkoutModal.items && checkoutModal.items.length > 0) {
           for (const item of checkoutModal.items) {
             const matchedProd = dbProducts.find(p => p.title === item.title) || INITIAL_PRODUCTS.find(p => p.title === item.title);
-            if (matchedProd && matchedProd.id.length > 20) {
-              await supabase.from('order_items').insert({
-                order_id: createdOrder.id,
-                product_id: matchedProd.id,
-                quantity: item.quantity,
-                price_at_time: item.price
-              });
-            }
+            const isValidUuid = matchedProd?.id && matchedProd.id.length > 20 && !matchedProd.id.startsWith('art-') && !matchedProd.id.startsWith('pin-') && !matchedProd.id.startsWith('chain-') && !matchedProd.id.startsWith('sticker-');
+
+            await supabase.from('order_items').insert({
+              order_id: orderIdToUse,
+              product_id: isValidUuid ? matchedProd.id : null,
+              product_title: item.title,
+              product_image: item.image_url || matchedProd?.image_url || '',
+              quantity: item.quantity,
+              price_at_time: item.price
+            });
           }
         }
+      }
+
+      // 2. Also keep a local backup list for instant UI syncing
+      try {
+        const existingLocal = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
+        const itemsWithPics = checkoutModal?.items.map(item => {
+          const matched = dbProducts.find(p => p.title === item.title) || INITIAL_PRODUCTS.find(p => p.title === item.title);
+          return {
+            ...item,
+            product_title: item.title,
+            product_image: item.image_url || matched?.image_url || '',
+            price_at_time: item.price
+          };
+        }) || [];
+
+        existingLocal.unshift({
+          ...orderPayload,
+          order_items: itemsWithPics
+        });
+        localStorage.setItem('bb_local_orders', JSON.stringify(existingLocal));
+      } catch (e) {
+        console.error('Local backup failed', e);
       }
     } catch (err) {
       console.error('Error logging order to Supabase:', err);
@@ -367,7 +410,9 @@ export default function Store() {
     const itemData = [{
       title: selectedProduct.title,
       quantity: modalQuantity,
-      price: selectedProduct.price
+      price: selectedProduct.price,
+      image_url: selectedProduct.image_url,
+      product_id: selectedProduct.id
     }];
 
     try {
@@ -434,7 +479,9 @@ export default function Store() {
     const itemData = cart.map(i => ({
       title: i.product.title,
       quantity: i.quantity,
-      price: i.product.price
+      price: i.product.price,
+      image_url: i.product.image_url,
+      product_id: i.product.id
     }));
 
     try {
