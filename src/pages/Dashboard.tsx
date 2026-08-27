@@ -35,6 +35,7 @@ import SellerOrdersSection from '../components/SellerOrdersSection';
 import SellerReviewsSection from '../components/SellerReviewsSection';
 import AdminSellerApplicationsSection from '../components/AdminSellerApplicationsSection';
 import PendingSellerNotice from '../components/PendingSellerNotice';
+import ApplyTwinArtistModal from '../components/ApplyTwinArtistModal';
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -44,6 +45,7 @@ export default function Dashboard() {
   const [applications, setApplications] = useState<SellerApplication[]>([]);
   const [userApplication, setUserApplication] = useState<SellerApplication | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   
   // Seller View Sub-tabs: 'fulfillment' | 'catalog' | 'reviews' | 'applications'
   const [sellerViewTab, setSellerViewTab] = useState<'fulfillment' | 'catalog' | 'reviews' | 'applications'>('fulfillment');
@@ -84,6 +86,7 @@ export default function Dashboard() {
 
       const userEmail = session.user.email || '';
       const isFoundingAdmin = userEmail.toLowerCase() === 'rhymnoorioque@gmail.com';
+      const metadata = session.user.user_metadata || {};
 
       // Try fetching profile from Supabase
       const { data } = await supabase
@@ -96,7 +99,6 @@ export default function Dashboard() {
 
       // Self-heal: if profile does not exist yet, create or fallback
       if (!activeProfile) {
-        const metadata = session.user.user_metadata || {};
         const isAdmin = isFoundingAdmin || metadata.is_admin === true;
         const initialRole = isAdmin ? 'seller' : (metadata.role === 'seller' ? 'seller' : 'buyer');
         const initialStatus = isAdmin ? 'approved' : (metadata.seller_status || (initialRole === 'seller' ? 'pending' : 'none'));
@@ -149,6 +151,42 @@ export default function Dashboard() {
         }
       }
 
+      // Check if this is a twin artist applicant needing synchronization
+      if (!isFoundingAdmin && activeProfile) {
+        const isApplicant = metadata.role === 'seller' || metadata.seller_status === 'pending' || activeProfile.role === 'seller' || activeProfile.seller_status === 'pending';
+        
+        if (isApplicant && activeProfile.seller_status !== 'approved' && activeProfile.seller_status !== 'rejected') {
+          activeProfile.role = 'seller';
+          activeProfile.seller_status = 'pending';
+
+          // Ensure seller application row exists in seller_applications table
+          const { data: existingApp } = await supabase
+            .from('seller_applications')
+            .select('id')
+            .eq('user_id', session.user.id)
+            .maybeSingle();
+
+          if (!existingApp) {
+            await supabase.from('seller_applications').upsert({
+              user_id: session.user.id,
+              full_name: activeProfile.full_name || metadata.full_name || userEmail.split('@')[0],
+              email: userEmail,
+              gcash_number: activeProfile.gcash_number || metadata.gcash_number || '09000000000',
+              shop_name: 'B&B Twin Artists Studio',
+              craft_category: activeProfile.craft_category || 'Pins & Artwork',
+              status: 'pending',
+              applied_at: new Date().toISOString()
+            });
+          }
+
+          // Keep profiles table in sync
+          await supabase.from('profiles').update({
+            role: 'seller',
+            seller_status: 'pending'
+          }).eq('id', session.user.id);
+        }
+      }
+
       setProfile(activeProfile);
 
       // Load data according to role & admin status
@@ -171,7 +209,7 @@ export default function Dashboard() {
         fetchReviews(),
         fetchApplications()
       ]);
-    } else if (p.role === 'seller') {
+    } else if (p.role === 'seller' || p.seller_status === 'pending' || p.seller_status === 'rejected') {
       if (p.seller_status === 'approved') {
         await Promise.all([
           fetchSellerProducts(p.id),
@@ -197,11 +235,43 @@ export default function Dashboard() {
         .select('*')
         .order('applied_at', { ascending: false });
 
-      if (!error && dbApps) {
-        setApplications(dbApps);
-      } else {
-        setApplications([]);
+      const allApps: SellerApplication[] = (!error && dbApps) ? [...dbApps] : [];
+
+      // Query profiles for any non-admin users to guarantee no applicants are missed
+      const { data: nonAdminProfiles } = await supabase
+        .from('profiles')
+        .select('*')
+        .neq('email', 'rhymnoorioque@gmail.com')
+        .eq('is_admin', false);
+
+      if (nonAdminProfiles && nonAdminProfiles.length > 0) {
+        for (const prof of nonAdminProfiles) {
+          const isSellerCandidate = prof.role === 'seller' || prof.seller_status === 'pending' || prof.seller_status === 'approved' || prof.seller_status === 'rejected';
+          const alreadyListed = allApps.some(a => a.user_id === prof.id || (prof.email && a.email && a.email.toLowerCase() === prof.email.toLowerCase()));
+
+          if (isSellerCandidate && !alreadyListed) {
+            const synthesizedApp: SellerApplication = {
+              id: prof.id,
+              user_id: prof.id,
+              full_name: prof.full_name || (prof.email ? prof.email.split('@')[0] : 'Twin Artist Applicant'),
+              email: prof.email || 'applicant@bbtrinkets.ph',
+              gcash_number: prof.gcash_number || '09000000000',
+              shop_name: prof.shop_name || 'B&B Twin Artists Studio',
+              craft_category: prof.craft_category || 'Pins & Artwork',
+              portfolio_url: prof.portfolio_url || '',
+              bio_or_experience: prof.bio || '',
+              status: prof.seller_status === 'approved' ? 'approved' : (prof.seller_status === 'rejected' ? 'rejected' : 'pending'),
+              applied_at: prof.created_at || new Date().toISOString()
+            };
+            allApps.unshift(synthesizedApp);
+
+            // Persist to database so it stays permanently recorded
+            supabase.from('seller_applications').upsert(synthesizedApp).then();
+          }
+        }
       }
+
+      setApplications(allApps);
     } catch (e) {
       console.error('Error fetching seller applications:', e);
       setApplications([]);
@@ -741,6 +811,67 @@ export default function Dashboard() {
     refreshAllData(updated);
   };
 
+  // Submit Twin Artist Application from Collector view
+  const handleApplyForTwinArtistAccess = async (data: {
+    fullName: string;
+    gcashNumber: string;
+    craftCategory: string;
+    bio?: string;
+  }) => {
+    if (!profile) return;
+    const now = new Date().toISOString();
+    try {
+      // 1. Insert into seller_applications
+      const { error: appErr } = await supabase
+        .from('seller_applications')
+        .upsert({
+          user_id: profile.id,
+          full_name: data.fullName,
+          email: profile.email,
+          gcash_number: data.gcashNumber,
+          shop_name: 'B&B Twin Artists Studio',
+          craft_category: data.craftCategory,
+          bio_or_experience: data.bio || '',
+          status: 'pending',
+          applied_at: now
+        });
+
+      if (appErr) console.warn('Application insert notice:', appErr);
+
+      // 2. Update profiles table
+      const { error: profErr } = await supabase
+        .from('profiles')
+        .update({
+          role: 'seller',
+          seller_status: 'pending',
+          full_name: data.fullName,
+          gcash_number: data.gcashNumber,
+          craft_category: data.craftCategory,
+          bio: data.bio || '',
+          updated_at: now
+        })
+        .eq('id', profile.id);
+
+      if (profErr) console.warn('Profile update notice:', profErr);
+
+      const updated: Profile = {
+        ...profile,
+        role: 'seller',
+        seller_status: 'pending',
+        full_name: data.fullName,
+        gcash_number: data.gcashNumber,
+        craft_category: data.craftCategory,
+        bio: data.bio || ''
+      };
+
+      setProfile(updated);
+      await refreshAllData(updated);
+      alert('Twin Artist Application submitted! Developer & Admin (Rhym) has received your request.');
+    } catch (err: any) {
+      alert('Error submitting application: ' + (err.message || 'Unknown error'));
+    }
+  };
+
   // Count pending applications for Admin badge
   const pendingAppsCount = useMemo(() => {
     return applications.filter(a => a.status === 'pending').length;
@@ -789,7 +920,7 @@ export default function Dashboard() {
 
   // Only Admin or Approved Twin Artists have access to seller studio and switching modes
   const canSwitchRole = isUserAdmin || isApprovedSeller;
-  const isSellerRole = profile.role === 'seller' && (isApprovedSeller || isPendingSeller || isRejectedSeller);
+  const isSellerRole = isUserAdmin ? (profile.role === 'seller') : (profile.role === 'seller' || isPendingSeller || isRejectedSeller);
 
   return (
     <div className="min-h-screen bg-bb-cream/60 py-8 sm:py-12">
@@ -1255,13 +1386,50 @@ export default function Dashboard() {
           )
         ) : (
           /* ---------------- BUYER EXPERIENCE (COLLECTOR) ---------------- */
-          <BuyerOrdersSection
-            orders={orders}
-            onRefresh={() => refreshAllData(profile)}
-            onConfirmReceipt={handleBuyerConfirmReceipt}
-            onCancelOrder={handleBuyerCancelOrder}
-          />
+          <div className="space-y-8">
+            {/* Collector Promo Banner for Twin Artist Access */}
+            {!profile.is_admin && profile.seller_status !== 'approved' && profile.seller_status !== 'pending' && (
+              <div className="bg-gradient-to-r from-teal-900 via-bb-navy to-teal-950 text-white p-6 sm:p-8 rounded-3xl shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border border-teal-800">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-teal-400/20 text-teal-200 border border-teal-400/30 flex items-center gap-1">
+                      <Sparkles size={11} /> Twin Artist Opportunity
+                    </span>
+                  </div>
+                  <h3 className="text-xl sm:text-2xl font-serif font-bold">
+                    Are you a Twin Artist creating handcrafted trinkets & art?
+                  </h3>
+                  <p className="text-xs sm:text-sm text-teal-100/80 max-w-2xl leading-relaxed">
+                    Request authorized access to the B&B Studio Dashboard. Upload pins, acrylic charms, handmade trinkets, and have payments handled automatically with PayMongo.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setIsApplyModalOpen(true)}
+                  className="bg-teal-400 hover:bg-teal-300 text-bb-navy font-bold text-xs sm:text-sm px-6 py-3 rounded-full transition-all shadow-md flex items-center gap-2 shrink-0 cursor-pointer"
+                >
+                  <Palette size={16} />
+                  Apply for Twin Artist Access
+                </button>
+              </div>
+            )}
+
+            <BuyerOrdersSection
+              orders={orders}
+              onRefresh={() => refreshAllData(profile)}
+              onConfirmReceipt={handleBuyerConfirmReceipt}
+              onCancelOrder={handleBuyerCancelOrder}
+            />
+          </div>
         )}
+
+        {/* Apply for Twin Artist Studio Access Modal */}
+        <ApplyTwinArtistModal
+          isOpen={isApplyModalOpen}
+          onClose={() => setIsApplyModalOpen(false)}
+          profile={profile}
+          onSubmitApplication={handleApplyForTwinArtistAccess}
+        />
 
       </div>
     </div>

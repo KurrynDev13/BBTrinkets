@@ -39,6 +39,7 @@ export default function Auth() {
         // Determine admin status: Developer & Admin email is rhymnoorioque@gmail.com
         const isAdmin = email.trim().toLowerCase() === 'rhymnoorioque@gmail.com';
         const sellerStatus = isAdmin ? 'approved' : (role === 'seller' ? 'pending' : 'none');
+        const contactGcash = gcash.trim() || '09000000000';
 
         // Register with metadata
         const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -48,7 +49,7 @@ export default function Auth() {
             data: {
               full_name: fullName.trim(),
               role: role,
-              gcash_number: role === 'buyer' ? gcash.trim() : undefined,
+              gcash_number: role === 'buyer' ? gcash.trim() : contactGcash,
               shop_name: role === 'seller' ? 'B&B Twin Artists Studio' : undefined,
               is_admin: isAdmin,
               seller_status: sellerStatus
@@ -63,29 +64,38 @@ export default function Auth() {
 
           // 1. If Twin Seller and not admin, create seller approval request
           if (role === 'seller' && !isAdmin) {
-            await supabase.from('seller_applications').insert({
-              user_id: userId,
-              full_name: fullName.trim(),
-              email: email.trim(),
-              shop_name: 'B&B Twin Artists Studio',
-              craft_category: 'Pins & Artwork',
-              status: 'pending'
-            });
+            try {
+              await supabase.from('seller_applications').insert({
+                user_id: userId,
+                full_name: fullName.trim(),
+                email: email.trim(),
+                gcash_number: contactGcash,
+                shop_name: 'B&B Twin Artists Studio',
+                craft_category: 'Pins & Artwork',
+                status: 'pending'
+              });
+            } catch (e) {
+              console.warn('Initial application creation will self-heal on login:', e);
+            }
           }
 
           // 2. Upsert profile in Supabase
-          await supabase
-            .from('profiles')
-            .upsert({ 
-              id: userId, 
-              role, 
-              full_name: fullName.trim(), 
-              email: email.trim(),
-              gcash_number: role === 'buyer' ? gcash.trim() : null,
-              shop_name: role === 'seller' ? 'B&B Twin Artists Studio' : null,
-              is_admin: isAdmin,
-              seller_status: sellerStatus
-            });
+          try {
+            await supabase
+              .from('profiles')
+              .upsert({ 
+                id: userId, 
+                role, 
+                full_name: fullName.trim(), 
+                email: email.trim(),
+                gcash_number: role === 'buyer' ? gcash.trim() : contactGcash,
+                shop_name: role === 'seller' ? 'B&B Twin Artists Studio' : null,
+                is_admin: isAdmin,
+                seller_status: sellerStatus
+              });
+          } catch (e) {
+            console.warn('Profile initialization will self-heal on login:', e);
+          }
 
           // 3. Navigate or prompt login
           if (authData.session) {
@@ -93,7 +103,11 @@ export default function Auth() {
             return;
           }
           
-          alert('Registration successful! Please sign in with your email and password.');
+          alert(
+            role === 'seller'
+              ? 'Twin Artist account created! Please check your email to confirm your account, then sign in to check verification status.'
+              : 'Registration successful! Please check your email if confirmation is needed, then sign in.'
+          );
           setIsLogin(true);
         }
       }
