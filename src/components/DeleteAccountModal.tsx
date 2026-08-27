@@ -30,40 +30,63 @@ export default function DeleteAccountModal({
     setError(null);
 
     try {
-      // 1. Call server-side deletion to cleanly purge records and Supabase Auth
+      // 1. Get current session token for authorized RPC / backend request
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      let rpcDeleted = false;
+
+      // 2. Direct Supabase Postgres RPC call (runs SECURITY DEFINER to delete auth.users)
       try {
+        const { data: rpcResult, error: rpcError } = await supabase.rpc('delete_user_account');
+        if (!rpcError && rpcResult === true) {
+          rpcDeleted = true;
+        } else if (rpcError) {
+          console.warn('Direct RPC delete note:', rpcError.message);
+        }
+      } catch (rpcErr) {
+        console.warn('RPC execution error:', rpcErr);
+      }
+
+      // 3. Call serverless endpoint (Vercel & Express)
+      let serverDeleted = false;
+      try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
         const response = await fetch('/api/user/delete-account', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({ userId: profile.id })
         });
 
-        if (!response.ok) {
+        if (response.ok) {
+          serverDeleted = true;
+        } else {
           const errData = await response.json().catch(() => ({}));
-          console.warn('Server deletion responded with non-200:', errData);
+          console.warn('Server deletion response note:', errData);
         }
       } catch (serverErr) {
-        console.warn('Server endpoint call error, proceeding with direct client cleanup:', serverErr);
+        console.warn('Server endpoint error:', serverErr);
       }
 
-      // 2. Direct client-side cleanup in Supabase
+      // 4. Direct client fallback cleanup for table records
       try {
-        // Delete seller application
         await supabase.from('seller_applications').delete().eq('user_id', profile.id);
-        // Delete user profile
         await supabase.from('profiles').delete().eq('id', profile.id);
       } catch (dbErr) {
-        console.warn('Client DB cleanup error:', dbErr);
+        console.warn('Client DB cleanup note:', dbErr);
       }
 
-      // 3. Sign out of Supabase Auth
+      // 5. Sign out of Supabase Auth & clear local cache
       try {
         await supabase.auth.signOut();
       } catch (authErr) {
-        console.warn('Auth sign out error:', authErr);
+        console.warn('Auth sign out note:', authErr);
       }
 
-      // 4. Clear local storage
       try {
         localStorage.clear();
         sessionStorage.clear();
@@ -71,7 +94,7 @@ export default function DeleteAccountModal({
         // ignore
       }
 
-      // 5. Trigger completion
+      // 6. Complete deletion
       onDeleted();
     } catch (err: any) {
       console.error('Failed to delete account:', err);

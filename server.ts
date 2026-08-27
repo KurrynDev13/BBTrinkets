@@ -159,12 +159,34 @@ async function startServer() {
         return res.status(400).json({ error: 'userId is required' });
       }
 
+      const authHeader = req.headers.authorization;
       const client = getSupabaseServer();
-      if (client) {
-        // 1. Delete user reviews
+
+      // 1. Try deleting via RPC if token is available
+      let rpcSuccess = false;
+      if (authHeader) {
+        try {
+          const rawUrl = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+          const anonKey = (process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+          if (rawUrl && anonKey) {
+            const userClient = createClient(rawUrl, anonKey, {
+              global: { headers: { Authorization: authHeader } }
+            });
+            const { error: rpcErr } = await userClient.rpc('delete_user_account');
+            if (!rpcErr) {
+              rpcSuccess = true;
+            }
+          }
+        } catch (rpcE) {
+          console.warn('RPC deletion note in server.ts:', rpcE);
+        }
+      }
+
+      if (!rpcSuccess && client) {
+        // 2. Delete user reviews
         await client.from('reviews').delete().eq('user_id', userId);
 
-        // 2. Delete buyer orders and order items
+        // 3. Delete buyer orders and order items
         const { data: userOrders } = await client.from('orders').select('id').eq('buyer_id', userId);
         if (userOrders && userOrders.length > 0) {
           const orderIds = userOrders.map((o: any) => o.id);
@@ -172,22 +194,22 @@ async function startServer() {
           await client.from('orders').delete().eq('buyer_id', userId);
         }
 
-        // 3. Delete user seller products if any
+        // 4. Delete user seller products if any
         await client.from('products').delete().eq('seller_id', userId);
 
-        // 4. Delete seller applications
+        // 5. Delete seller applications
         await client.from('seller_applications').delete().eq('user_id', userId);
 
-        // 5. Delete profile record
+        // 6. Delete profile record
         await client.from('profiles').delete().eq('id', userId);
 
-        // 6. Delete from Supabase Auth via admin API if available
+        // 7. Delete from Supabase Auth via admin API if available
         try {
           if (client.auth && client.auth.admin && typeof client.auth.admin.deleteUser === 'function') {
             await client.auth.admin.deleteUser(userId);
           }
         } catch (authAdminErr) {
-          console.warn('Supabase auth.admin.deleteUser warning (non-fatal):', authAdminErr);
+          console.warn('Supabase auth.admin.deleteUser warning (requires SUPABASE_SERVICE_ROLE_KEY):', authAdminErr);
         }
       }
 

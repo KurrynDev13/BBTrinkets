@@ -300,3 +300,45 @@ WITH CHECK (bucket_id = 'product-images' AND auth.role() = 'authenticated');
 CREATE POLICY "Sellers can delete and update product images."
 ON storage.objects FOR ALL
 USING (bucket_id = 'product-images' AND auth.role() = 'authenticated');
+
+-- ==============================================================================
+-- 8. ACCOUNT DELETION STORED PROCEDURE (Deletes from public tables & auth.users)
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.delete_user_account()
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+DECLARE
+  curr_uid UUID;
+BEGIN
+  curr_uid := auth.uid();
+  IF curr_uid IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  -- 1. Delete user reviews
+  DELETE FROM public.reviews WHERE user_id = curr_uid;
+
+  -- 2. Delete buyer orders and order items
+  DELETE FROM public.order_items WHERE order_id IN (SELECT id FROM public.orders WHERE buyer_id = curr_uid);
+  DELETE FROM public.orders WHERE buyer_id = curr_uid;
+
+  -- 3. Delete seller products if any
+  DELETE FROM public.products WHERE seller_id = curr_uid;
+
+  -- 4. Delete seller applications
+  DELETE FROM public.seller_applications WHERE user_id = curr_uid;
+
+  -- 5. Delete profile record
+  DELETE FROM public.profiles WHERE id = curr_uid;
+
+  -- 6. Delete the authentication user record
+  DELETE FROM auth.users WHERE id = curr_uid;
+
+  RETURN true;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.delete_user_account() TO authenticated;
