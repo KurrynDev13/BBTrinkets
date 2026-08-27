@@ -464,19 +464,30 @@ export default function Dashboard() {
   };
 
   // Admin: Revoke Seller Privileges
-  const handleRevokeSellerAccess = async (userId: string) => {
+  const handleRevokeSellerAccess = async (userId: string, applicationId: string) => {
     try {
-      await supabase
-        .from('profiles')
-        .update({
-          seller_status: 'rejected',
-          role: 'buyer'
+      const reasonNotes = 'Twin Artist access revoked by administrator.';
+      const res = await fetch('/api/admin/applications/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          applicationId, 
+          userId, 
+          action: 'reject', 
+          notes: reasonNotes,
+          callerEmail: profile?.email 
         })
-        .eq('id', userId);
+      });
 
-      setApplications(prev => prev.map(a => a.user_id === userId ? { ...a, status: 'rejected' } : a));
-    } catch (e) {
-      console.warn(e);
+      if (!res.ok) {
+        throw new Error('Failed to revoke seller access on the server.');
+      }
+
+      const now = new Date().toISOString();
+      setApplications(prev => prev.map(a => a.id === applicationId ? { ...a, status: 'rejected', review_notes: reasonNotes, reviewed_at: now } : a));
+    } catch (err: any) {
+      console.error(err);
+      alert('Error revoking access: ' + (err.message || 'Unknown error'));
     }
   };
 

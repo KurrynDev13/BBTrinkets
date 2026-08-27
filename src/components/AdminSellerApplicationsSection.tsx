@@ -23,7 +23,7 @@ interface AdminSellerApplicationsSectionProps {
   onRefresh: () => void;
   onApproveApplication: (application: SellerApplication) => Promise<void>;
   onRejectApplication: (applicationId: string, notes?: string) => Promise<void>;
-  onRevokeSellerAccess?: (userId: string) => Promise<void>;
+  onRevokeSellerAccess?: (userId: string, applicationId: string) => Promise<void>;
 }
 
 type TabType = 'pending' | 'approved' | 'rejected' | 'all';
@@ -92,7 +92,7 @@ export default function AdminSellerApplicationsSection({
     if (!confirm('Are you sure you want to revoke Twin Seller access for this user?')) return;
     setProcessingId(appId);
     try {
-      await onRevokeSellerAccess(userId);
+      await onRevokeSellerAccess(userId, appId);
     } finally {
       setProcessingId(null);
     }
