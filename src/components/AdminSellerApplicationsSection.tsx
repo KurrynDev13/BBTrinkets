@@ -226,8 +226,8 @@ export default function AdminSellerApplicationsSection({
                 className="bg-white rounded-3xl p-5 sm:p-6 border border-bb-navy/10 shadow-xs hover:border-bb-teal/40 transition-all space-y-4 relative flex flex-col justify-between"
               >
                 <div className="space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
+                  <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-serif text-lg font-bold shrink-0 ${
                         isApproved ? 'bg-teal-100 text-teal-800' :
                         isPending ? 'bg-amber-100 text-amber-900' :
@@ -236,33 +236,35 @@ export default function AdminSellerApplicationsSection({
                         {app.full_name.charAt(0)}
                       </div>
 
-                      <div>
-                        <h4 className="font-serif font-bold text-bb-navy text-base leading-tight">
+                      <div className="min-w-0">
+                        <h4 className="font-serif font-bold text-bb-navy text-base leading-tight truncate">
                           {app.full_name}
                         </h4>
                         <div className="text-xs text-bb-navy/60 flex items-center gap-1.5 mt-0.5">
-                          <Mail size={12} />
+                          <Mail size={12} className="shrink-0" />
                           <span className="truncate">{app.email}</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Status Badge */}
-                    {isPending && (
-                      <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-200 shrink-0 flex items-center gap-1">
-                        <Clock size={11} /> Pending Review
-                      </span>
-                    )}
-                    {isApproved && (
-                      <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-teal-100 text-teal-800 border border-teal-200 shrink-0 flex items-center gap-1">
-                        <CheckCircle2 size={11} /> Authorized Twin
-                      </span>
-                    )}
-                    {isRejected && (
-                      <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-800 border border-red-200 shrink-0 flex items-center gap-1">
-                        <XCircle size={11} /> Declined
-                      </span>
-                    )}
+                    <div className="shrink-0 self-start">
+                      {isPending && (
+                        <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-200 flex items-center gap-1">
+                          <Clock size={11} /> Pending Review
+                        </span>
+                      )}
+                      {isApproved && (
+                        <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-teal-100 text-teal-800 border border-teal-200 flex items-center gap-1">
+                          <CheckCircle2 size={11} /> Authorized Twin
+                        </span>
+                      )}
+                      {isRejected && (
+                        <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-800 border border-red-200 flex items-center gap-1">
+                          <XCircle size={11} /> Declined
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="p-3 bg-bb-cream/50 rounded-2xl text-xs space-y-1 text-bb-navy/70">
