@@ -6,7 +6,7 @@ import type { SellerApplication } from '../types';
 import siteLogo from '../logo_bbtrinkets.png';
 
 export default function Auth() {
-  const [isLogin, setIsLogin] = useState(true);
+  const [authMode, setAuthMode] = useState<'login' | 'register-collector' | 'register-artist'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -30,16 +30,15 @@ export default function Auth() {
     setError('');
 
     try {
-      if (isLogin) {
+      if (authMode === 'login') {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         navigate('/dashboard');
       } else {
         // Determine admin status: Developer & Admin email is rhymnoorioque@gmail.com
         const isAdmin = email.trim().toLowerCase() === 'rhymnoorioque@gmail.com';
-        const sellerStatus = isAdmin ? 'approved' : 'none';
-        const role = isAdmin ? 'seller' : 'buyer';
-        const contactGcash = gcash.trim() || '09000000000';
+        const role = isAdmin ? 'seller' : (authMode === 'register-artist' ? 'seller' : 'buyer');
+        const contactGcash = gcash.trim() || '09000000000'; // Default for artists who don't need it
 
         // Register with metadata
         const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -52,7 +51,7 @@ export default function Auth() {
               gcash_number: role === 'buyer' ? gcash.trim() : contactGcash,
               shop_name: role === 'seller' ? 'B&B Twin Artists Studio' : undefined,
               is_admin: isAdmin,
-              seller_status: sellerStatus
+              // The database trigger automatically sets seller_status to 'pending' for non-admin sellers.
             }
           }
         });
@@ -108,7 +107,7 @@ export default function Auth() {
                 gcash_number: role === 'buyer' ? gcash.trim() : contactGcash,
                 shop_name: role === 'seller' ? 'B&B Twin Artists Studio' : null,
                 is_admin: isAdmin,
-                seller_status: sellerStatus
+                seller_status: isAdmin ? 'approved' : (role === 'seller' ? 'pending' : 'none')
               });
           } catch (e) {
             console.warn('Profile initialization will self-heal on login:', e);
@@ -121,7 +120,7 @@ export default function Auth() {
           }
           
           alert('Registration successful! Please check your email if confirmation is needed, then sign in.');
-          setIsLogin(true);
+          setAuthMode('login');
         }
       }
     } catch (err: any) {
@@ -143,10 +142,12 @@ export default function Auth() {
             />
           </Link>
           <h2 className="text-center text-3xl font-serif font-bold text-bb-navy">
-            {isLogin ? 'Welcome Back' : 'Create an Account'}
+            {authMode === 'login' ? 'Welcome Back' : 'Create an Account'}
           </h2>
           <p className="mt-2 text-center text-sm text-bb-navy/60">
-            {isLogin ? 'Sign in to access your B&B Studio dashboard' : 'Join the B&B Twin Artists collectors & studio community'}
+            {authMode === 'login' ? 'Sign in to access your B&B Studio dashboard' : 
+             authMode === 'register-collector' ? 'Join the B&B Twin Artists collectors community' :
+             'Join the B&B Twin Artists studio community'}
           </p>
         </div>
         
@@ -158,7 +159,7 @@ export default function Auth() {
           )}
           
           <div className="space-y-4">
-            {!isLogin && (
+            {authMode !== 'login' && (
               <>
                 <div>
                   <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">
@@ -174,20 +175,22 @@ export default function Auth() {
                   />
                 </div>
                 
-                <div>
-                  <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">
-                    Buyer GCash Number *
-                  </label>
-                  <input
-                      type="text"
-                      required
-                      placeholder="09XXXXXXXXX"
-                      value={gcash}
-                      onChange={(e) => setGcash(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl border border-bb-navy/20 focus:outline-none focus:ring-2 focus:ring-bb-teal bg-white text-sm font-mono"
-                    />
-                  <p className="text-[11px] text-bb-navy/50 mt-1">Used for paying for orders and payment confirmations via PayMongo.</p>
-                </div>
+                {authMode === 'register-collector' && (
+                  <div>
+                    <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">
+                      Buyer GCash Number *
+                    </label>
+                    <input
+                        type="text"
+                        required
+                        placeholder="09XXXXXXXXX"
+                        value={gcash}
+                        onChange={(e) => setGcash(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl border border-bb-navy/20 focus:outline-none focus:ring-2 focus:ring-bb-teal bg-white text-sm font-mono"
+                      />
+                    <p className="text-[11px] text-bb-navy/50 mt-1">Used for paying for orders and payment confirmations via PayMongo.</p>
+                  </div>
+                )}
               </>
             )}
 
@@ -226,20 +229,44 @@ export default function Auth() {
             className="w-full flex justify-center items-center gap-2 py-4 px-4 border border-transparent rounded-full shadow-sm text-base font-bold text-white bg-bb-navy hover:bg-bb-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-bb-navy transition-all disabled:opacity-50"
           >
             {loading ? 'Processing...' : (
-              isLogin 
+              authMode === 'login'
                 ? 'Sign In to Dashboard' 
-                : 'Create Collector Account'
+                : authMode === 'register-collector'
+                ? 'Create Collector Account'
+                : 'Register as Twin Artist'
             )}
           </button>
           
-          <div className="text-center mt-4">
-            <button
-              type="button"
-              onClick={() => { setIsLogin(!isLogin); setError(''); }}
-              className="text-xs sm:text-sm text-bb-teal hover:text-bb-navy font-semibold transition-colors"
-            >
-              {isLogin ? "Don't have an account? Register as a Collector" : 'Already have an account? Sign in'}
-            </button>
+          <div className="flex flex-col items-center gap-3 mt-6">
+            {authMode !== 'login' && (
+              <button
+                type="button"
+                onClick={() => { setAuthMode('login'); setError(''); }}
+                className="text-xs sm:text-sm text-bb-teal hover:text-bb-navy font-semibold transition-colors"
+              >
+                Already have an account? Sign in
+              </button>
+            )}
+            
+            {authMode !== 'register-collector' && (
+              <button
+                type="button"
+                onClick={() => { setAuthMode('register-collector'); setError(''); }}
+                className="text-xs sm:text-sm text-bb-navy/70 hover:text-bb-navy transition-colors"
+              >
+                Need to buy? Register as a Collector
+              </button>
+            )}
+
+            {authMode !== 'register-artist' && (
+              <button
+                type="button"
+                onClick={() => { setAuthMode('register-artist'); setError(''); }}
+                className="text-xs sm:text-sm text-bb-navy/70 hover:text-bb-navy transition-colors"
+              >
+                Want to sell? Register as a Twin Artist
+              </button>
+            )}
           </div>
         </form>
       </div>
