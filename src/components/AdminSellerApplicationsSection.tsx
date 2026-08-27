@@ -39,11 +39,6 @@ export default function AdminSellerApplicationsSection({
   const [searchQuery, setSearchQuery] = useState('');
   const [processingId, setProcessingId] = useState<string | null>(null);
 
-  // Quick simulate Twin Artist registration for Developer testing
-  const [showSimulateModal, setShowSimulateModal] = useState(false);
-  const [simName, setSimName] = useState('Twin Artist 1');
-  const [simEmail, setSimEmail] = useState('twin1.artist@gmail.com');
-
   // Counts
   const counts = useMemo(() => {
     return {
@@ -73,25 +68,6 @@ export default function AdminSellerApplicationsSection({
       return true;
     });
   }, [applications, activeTab, searchQuery]);
-
-  const handleSimulateAdd = () => {
-    const newApp: SellerApplication = {
-      id: `app-sim-${Date.now()}`,
-      user_id: `user-sim-${Date.now()}`,
-      full_name: simName.trim() || 'Twin Artist',
-      email: simEmail.trim() || 'twin@gmail.com',
-      shop_name: 'B&B Twin Artists Studio',
-      craft_category: 'Pins & Artworks',
-      status: 'pending',
-      applied_at: new Date().toISOString()
-    };
-
-    const localApps: SellerApplication[] = JSON.parse(localStorage.getItem('bb_seller_applications') || '[]');
-    localApps.unshift(newApp);
-    localStorage.setItem('bb_seller_applications', JSON.stringify(localApps));
-    setShowSimulateModal(false);
-    onRefresh();
-  };
 
   const handleApprove = async (app: SellerApplication) => {
     setProcessingId(app.id);
@@ -145,12 +121,6 @@ export default function AdminSellerApplicationsSection({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={() => setShowSimulateModal(true)}
-            className="text-xs bg-white/10 hover:bg-white/20 text-white font-semibold px-4 py-2.5 rounded-full border border-white/20 transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <Sparkles size={14} className="text-amber-300" /> Simulate Twin Signup
-          </button>
           <button
             onClick={onRefresh}
             className="text-xs bg-white text-bb-navy hover:bg-bb-cream font-bold px-4 py-2.5 rounded-full transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
@@ -359,75 +329,6 @@ export default function AdminSellerApplicationsSection({
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* Simulate Twin Artist Registration Modal for Testing */}
-      {showSimulateModal && (
-        <div className="fixed inset-0 bg-bb-navy/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 space-y-5 border border-bb-navy/10 shadow-2xl">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center">
-                  <Sparkles size={16} />
-                </div>
-                <h3 className="font-serif font-bold text-bb-navy text-lg">Simulate Twin Artist Signup</h3>
-              </div>
-              <button
-                onClick={() => setShowSimulateModal(false)}
-                className="w-8 h-8 rounded-full bg-bb-cream hover:bg-bb-navy/10 text-bb-navy/70 flex items-center justify-center cursor-pointer"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <p className="text-xs text-bb-navy/70 leading-relaxed">
-              Creates a sample Twin Artist registration request to test the instant approval and catalog unlock workflow.
-            </p>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">
-                  Twin Artist Name
-                </label>
-                <input
-                  type="text"
-                  value={simName}
-                  onChange={(e) => setSimName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={simEmail}
-                  onChange={(e) => setSimEmail(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowSimulateModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-bb-navy/70 hover:bg-bb-cream"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSimulateAdd}
-                className="px-5 py-2 rounded-xl text-xs font-bold bg-bb-teal text-white hover:bg-teal-700 shadow-sm cursor-pointer"
-              >
-                Add Pending Request
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>

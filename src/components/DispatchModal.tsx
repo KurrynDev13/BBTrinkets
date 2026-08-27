@@ -34,51 +34,31 @@ export default function DispatchModal({ order, isOpen, onClose, onOrderDispatche
     setLoading(true);
 
     try {
-      // 1. Update in Supabase
-      if (order.id.length > 20) {
-        await supabase
-          .from('orders')
-          .update({
-            status: 'shipped',
-            courier,
-            tracking_number: trackingNumber.trim() || `TRK-${Date.now().toString().slice(-6)}`,
-            seller_notes: sellerNotes.trim(),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', order.id);
-      }
-
-      // 2. Update in local storage backup
-      const updatedOrder: Order = {
-        ...order,
-        status: 'shipped',
+      const updatedFields = {
+        status: 'shipped' as const,
         courier,
         tracking_number: trackingNumber.trim() || `TRK-${Date.now().toString().slice(-6)}`,
         seller_notes: sellerNotes.trim(),
         updated_at: new Date().toISOString()
       };
 
-      try {
-        const localOrders = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
-        const updatedLocal = localOrders.map((o: Order) => o.id === order.id ? updatedOrder : o);
-        localStorage.setItem('bb_local_orders', JSON.stringify(updatedLocal));
-      } catch (e) {
-        console.warn('Local update error', e);
-      }
+      const { error } = await supabase
+        .from('orders')
+        .update(updatedFields)
+        .eq('id', order.id);
+
+      if (error) throw error;
+
+      const updatedOrder: Order = {
+        ...order,
+        ...updatedFields
+      };
 
       onOrderDispatched(updatedOrder);
       onClose();
     } catch (err: any) {
       console.error('Dispatch error:', err);
-      // Fallback
-      onOrderDispatched({
-        ...order,
-        status: 'shipped',
-        courier,
-        tracking_number: trackingNumber.trim() || 'TRK-983412',
-        seller_notes: sellerNotes.trim()
-      });
-      onClose();
+      alert('Error dispatching order: ' + (err.message || 'Please try again'));
     } finally {
       setLoading(false);
     }

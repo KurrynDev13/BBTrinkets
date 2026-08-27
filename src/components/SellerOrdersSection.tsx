@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type MouseEvent } from 'react';
 import { 
   PackageCheck, 
   Truck, 
@@ -16,8 +16,12 @@ import {
   Sparkles,
   ExternalLink,
   ChevronDown,
-  RefreshCw
+  ChevronUp,
+  RefreshCw,
+  Eye,
+  Layers
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import type { Order, OrderStatus } from '../types';
 import DispatchModal from './DispatchModal';
 
@@ -38,6 +42,14 @@ export default function SellerOrdersSection({
   const [searchQuery, setSearchQuery] = useState('');
   const [dispatchModalOrder, setDispatchModalOrder] = useState<Order | null>(null);
   const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
+
+  // Set of expanded order IDs. If 1 or 2 orders, default all expanded; otherwise first expanded
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
+    if (orders.length <= 2) {
+      return new Set(orders.map(o => o.id));
+    }
+    return new Set(orders.slice(0, 1).map(o => o.id));
+  });
 
   // Tab counts
   const tabCounts = useMemo(() => {
@@ -80,7 +92,30 @@ export default function SellerOrdersSection({
     });
   }, [orders, activeTab, searchQuery]);
 
-  const handleMarkPreparing = async (orderId: string) => {
+  const toggleOrder = (orderId: string) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(orderId)) {
+        next.delete(orderId);
+      } else {
+        next.add(orderId);
+      }
+      return next;
+    });
+  };
+
+  const handleExpandAll = () => {
+    setExpandedIds(new Set(filteredOrders.map(o => o.id)));
+  };
+
+  const handleCollapseAll = () => {
+    setExpandedIds(new Set());
+  };
+
+  const isAllExpanded = filteredOrders.length > 0 && filteredOrders.every(o => expandedIds.has(o.id));
+
+  const handleMarkPreparing = async (orderId: string, e?: MouseEvent) => {
+    if (e) e.stopPropagation();
     setProcessingOrderId(orderId);
     try {
       await onUpdateOrderStatus(orderId, 'preparing', {
@@ -93,7 +128,8 @@ export default function SellerOrdersSection({
     }
   };
 
-  const handleMarkPaid = async (orderId: string) => {
+  const handleMarkPaid = async (orderId: string, e?: MouseEvent) => {
+    if (e) e.stopPropagation();
     setProcessingOrderId(orderId);
     try {
       await onUpdateOrderStatus(orderId, 'paid', {
@@ -106,7 +142,8 @@ export default function SellerOrdersSection({
     }
   };
 
-  const handleMarkCompleted = async (orderId: string) => {
+  const handleMarkCompleted = async (orderId: string, e?: MouseEvent) => {
+    if (e) e.stopPropagation();
     if (!confirm('Mark this order as completed / delivered?')) return;
     setProcessingOrderId(orderId);
     try {
@@ -127,13 +164,13 @@ export default function SellerOrdersSection({
             <PackageCheck className="text-bb-teal" size={28} /> Order Fulfillment Hub
           </h2>
           <p className="text-xs sm:text-sm text-bb-navy/60 mt-0.5">
-            Manage incoming collector orders, pack handcrafted goods, and assign shipping couriers.
+            Manage incoming collector orders, pack handcrafted goods, and assign shipping couriers. Click any card to collapse or expand.
           </p>
         </div>
 
         <button
           onClick={onRefresh}
-          className="self-start sm:self-auto text-xs text-bb-navy bg-white hover:bg-bb-cream border border-bb-navy/15 px-4 py-2 rounded-full font-semibold transition-colors flex items-center gap-1.5 shadow-sm"
+          className="self-start sm:self-auto text-xs text-bb-navy bg-white hover:bg-bb-cream border border-bb-navy/15 px-4 py-2 rounded-full font-semibold transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
         >
           <RefreshCw size={13} /> Refresh Orders
         </button>
@@ -144,7 +181,7 @@ export default function SellerOrdersSection({
         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
           <button
             onClick={() => setActiveTab('needs-prep')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 ${
+            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'needs-prep'
                 ? 'bg-bb-teal text-white shadow-sm'
                 : 'text-bb-navy/70 hover:bg-teal-50 hover:text-teal-900'
@@ -163,7 +200,7 @@ export default function SellerOrdersSection({
 
           <button
             onClick={() => setActiveTab('shipped')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 ${
+            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'shipped'
                 ? 'bg-purple-600 text-white shadow-sm'
                 : 'text-bb-navy/70 hover:bg-purple-50 hover:text-purple-900'
@@ -175,7 +212,7 @@ export default function SellerOrdersSection({
 
           <button
             onClick={() => setActiveTab('completed')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 ${
+            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'completed'
                 ? 'bg-emerald-600 text-white shadow-sm'
                 : 'text-bb-navy/70 hover:bg-emerald-50 hover:text-emerald-900'
@@ -187,7 +224,7 @@ export default function SellerOrdersSection({
 
           <button
             onClick={() => setActiveTab('pending')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 ${
+            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'pending'
                 ? 'bg-amber-600 text-white shadow-sm'
                 : 'text-bb-navy/70 hover:bg-amber-50 hover:text-amber-900'
@@ -199,7 +236,7 @@ export default function SellerOrdersSection({
 
           <button
             onClick={() => setActiveTab('all')}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 ${
+            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'all'
                 ? 'bg-bb-navy text-white shadow-sm'
                 : 'text-bb-navy/70 hover:bg-bb-cream hover:text-bb-navy'
@@ -210,16 +247,42 @@ export default function SellerOrdersSection({
         </div>
       </div>
 
-      {/* Search Input */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-bb-navy/40" size={16} />
-        <input
-          type="text"
-          placeholder="Filter by buyer name, phone, address, or items..."
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-bb-navy/15 bg-white text-xs text-bb-navy focus:outline-none focus:border-bb-teal shadow-sm"
-        />
+      {/* Search & Collapse All / Expand All Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-bb-navy/40" size={16} />
+          <input
+            type="text"
+            placeholder="Filter by buyer name, phone, address, or items..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-bb-navy/15 bg-white text-xs text-bb-navy focus:outline-none focus:border-bb-teal shadow-2xs"
+          />
+        </div>
+
+        {filteredOrders.length > 0 && (
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <span className="text-xs text-bb-navy/60 font-medium">
+              Showing {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'}
+            </span>
+            <span className="text-bb-navy/30">•</span>
+            {isAllExpanded ? (
+              <button
+                onClick={handleCollapseAll}
+                className="text-xs text-bb-navy/70 hover:text-bb-navy bg-white hover:bg-bb-cream border border-bb-navy/15 px-3.5 py-2 rounded-xl font-semibold transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              >
+                <ChevronUp size={14} /> Collapse All
+              </button>
+            ) : (
+              <button
+                onClick={handleExpandAll}
+                className="text-xs text-bb-navy/70 hover:text-bb-navy bg-white hover:bg-bb-cream border border-bb-navy/15 px-3.5 py-2 rounded-xl font-semibold transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              >
+                <ChevronDown size={14} /> Expand All
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Orders List */}
@@ -238,213 +301,328 @@ export default function SellerOrdersSection({
           </p>
         </div>
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-4">
           {filteredOrders.map(order => {
+            const isExpanded = expandedIds.has(order.id);
             const isNeedsPrep = order.status === 'paid' || order.status === 'preparing';
             const isShipped = order.status === 'shipped';
             const isPending = order.status === 'pending';
             const isCompleted = order.status === 'completed';
+            const itemsCount = order.order_items?.reduce((acc, i) => acc + (i.quantity || 1), 0) || order.order_items?.length || 1;
 
             return (
               <div
                 key={order.id}
-                className={`bg-white rounded-3xl border shadow-sm overflow-hidden transition-all ${
-                  isNeedsPrep ? 'border-teal-200 ring-2 ring-teal-100' : 'border-bb-navy/10'
+                className={`bg-white rounded-3xl border shadow-xs transition-all duration-200 overflow-hidden hover:shadow-md ${
+                  isNeedsPrep ? 'border-teal-200 ring-1 ring-teal-100' : 'border-bb-navy/10'
                 }`}
               >
-                {/* Header */}
-                <div className="bg-bb-cream/50 px-6 py-4 border-b border-bb-navy/10 flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-bb-navy text-white rounded-2xl flex items-center justify-center font-mono font-bold text-xs">
+                {/* Clickable Header for Collapsing/Expanding */}
+                <button
+                  type="button"
+                  onClick={() => toggleOrder(order.id)}
+                  aria-expanded={isExpanded}
+                  className={`w-full text-left p-4 sm:px-6 sm:py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors cursor-pointer select-none ${
+                    isExpanded ? 'bg-bb-cream/60 border-b border-bb-navy/10' : 'bg-bb-cream/30 hover:bg-bb-cream/50'
+                  }`}
+                >
+                  {/* Left: Chevron + Order ID + Customer Name + Date */}
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-transform duration-200 shrink-0 ${
+                      isExpanded ? 'bg-bb-navy text-white rotate-180' : 'bg-bb-navy/10 text-bb-navy'
+                    }`}>
+                      <ChevronDown size={17} />
+                    </div>
+
+                    <div className="w-10 h-10 bg-bb-navy text-white rounded-2xl flex items-center justify-center font-mono font-bold text-xs shrink-0 shadow-2xs">
                       #{order.id.slice(0, 4)}
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-bb-navy">Order ID: {order.id}</span>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-bb-navy truncate">
+                          {order.shipping_name || 'Collector Order'}
+                        </span>
+                        <span className="font-mono text-xs text-bb-navy/50">
+                          (#{order.id.slice(0, 8)})
+                        </span>
                         {order.paymongo_checkout_id && (
-                          <span className="text-[10px] bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded-full font-mono">
-                            PM: {order.paymongo_checkout_id}
+                          <span className="text-[10px] bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded-full font-mono hidden sm:inline">
+                            PayMongo
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-bb-navy/50">
-                        Placed on {new Date(order.created_at).toLocaleString('en-US', {
-                          dateStyle: 'medium',
-                          timeStyle: 'short'
+                      <p className="text-[11px] text-bb-navy/60">
+                        {new Date(order.created_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
                         })}
+                        {order.shipping_phone && ` • ${order.shipping_phone}`}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1.5 ${
-                      order.status === 'paid' ? 'bg-teal-100 text-teal-800' :
-                      order.status === 'preparing' ? 'bg-indigo-100 text-indigo-800' :
-                      order.status === 'shipped' ? 'bg-purple-100 text-purple-800' :
-                      order.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
-                      'bg-amber-100 text-amber-800'
-                    }`}>
-                      <span className="w-2 h-2 rounded-full bg-current"></span>
-                      {order.status.toUpperCase()}
-                    </span>
+                  {/* Right: Quick Thumbnails + Total Amount + Status Badge + Quick Action */}
+                  <div className="flex items-center justify-between md:justify-end gap-3.5 shrink-0">
+                    {/* Item Thumbnails Preview */}
+                    <div className="flex items-center gap-2">
+                      <div className="flex -space-x-2 overflow-hidden items-center py-0.5">
+                        {order.order_items?.slice(0, 3).map((item, idx) => (
+                          item.product_image ? (
+                            <img
+                              key={idx}
+                              src={item.product_image}
+                              alt={item.product_title}
+                              className="inline-block h-8 w-8 rounded-lg object-cover ring-2 ring-white bg-bb-cream shrink-0"
+                            />
+                          ) : (
+                            <div key={idx} className="inline-flex h-8 w-8 rounded-lg ring-2 ring-white bg-bb-cream items-center justify-center text-[10px] font-bold text-bb-navy/50 shrink-0">
+                              B&B
+                            </div>
+                          )
+                        ))}
+                      </div>
+
+                      <span className="text-xs text-bb-navy/70 font-semibold">
+                        {itemsCount} {itemsCount === 1 ? 'item' : 'items'}
+                      </span>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="font-serif font-bold text-sm sm:text-base text-bb-navy block">
+                        ₱{order.total_amount.toFixed(2)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1.5 shrink-0 ${
+                        order.status === 'paid' ? 'bg-teal-100 text-teal-800' :
+                        order.status === 'preparing' ? 'bg-indigo-100 text-indigo-800' :
+                        order.status === 'shipped' ? 'bg-purple-100 text-purple-800' :
+                        order.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
+                        'bg-amber-100 text-amber-800'
+                      }`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                        {order.status.toUpperCase()}
+                      </span>
+
+                      <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors hidden sm:inline ${
+                        isExpanded
+                          ? 'bg-bb-navy/10 text-bb-navy border-bb-navy/10'
+                          : 'bg-white text-bb-navy/60 border-bb-navy/10 hover:text-bb-navy'
+                      }`}>
+                        {isExpanded ? 'Collapse' : 'Expand'}
+                      </span>
+                    </div>
                   </div>
-                </div>
+                </button>
 
-                <div className="p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-                  {/* Left: Items breakdown (7 cols) */}
-                  <div className="lg:col-span-7 space-y-4">
-                    <h4 className="text-xs font-bold text-bb-navy uppercase tracking-wider text-bb-navy/60">
-                      Ordered Trinkets & Collectibles:
-                    </h4>
+                {/* Collapsible Expanded Body */}
+                <AnimatePresence initial={false}>
+                  {isExpanded && (
+                    <motion.div
+                      key="seller-order-content"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.22, ease: 'easeInOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 bg-white">
+                        {/* Left: Items breakdown (7 cols) */}
+                        <div className="lg:col-span-7 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-xs font-bold text-bb-navy uppercase tracking-wider text-bb-navy/60">
+                              Ordered Trinkets & Collectibles ({itemsCount}):
+                            </h4>
+                            <span className="font-mono text-xs text-bb-navy/40">Order ID: {order.id}</span>
+                          </div>
 
-                    <div className="space-y-3">
-                      {order.order_items && order.order_items.length > 0 ? (
-                        order.order_items.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between gap-3 bg-bb-cream/20 p-3 rounded-2xl border border-bb-navy/5">
-                            <div className="flex items-center gap-3 min-w-0">
-                              {item.product_image ? (
-                                <img
-                                  src={item.product_image}
-                                  alt={item.product_title}
-                                  className="w-12 h-12 object-cover rounded-xl bg-bb-cream border border-bb-navy/5 shrink-0"
-                                />
-                              ) : (
-                                <div className="w-12 h-12 bg-bb-cream rounded-xl flex items-center justify-center text-bb-navy/30 text-xs font-bold shrink-0">B&B</div>
+                          <div className="space-y-3">
+                            {order.order_items && order.order_items.length > 0 ? (
+                              order.order_items.map((item, idx) => (
+                                <div key={idx} className="flex items-center justify-between gap-3 bg-bb-cream/25 p-3.5 rounded-2xl border border-bb-navy/5">
+                                  <div className="flex items-center gap-3.5 min-w-0">
+                                    {item.product_image ? (
+                                      <img
+                                        src={item.product_image}
+                                        alt={item.product_title}
+                                        className="w-13 h-13 object-cover rounded-xl bg-bb-cream border border-bb-navy/5 shrink-0"
+                                      />
+                                    ) : (
+                                      <div className="w-13 h-13 bg-bb-cream rounded-xl flex items-center justify-center text-bb-navy/30 text-xs font-bold shrink-0">B&B</div>
+                                    )}
+                                    <div className="min-w-0">
+                                      <p className="font-bold text-xs sm:text-sm text-bb-navy truncate">{item.product_title}</p>
+                                      <p className="text-xs text-bb-navy/60">
+                                        Qty: <span className="font-bold text-bb-navy">{item.quantity}</span> • ₱{item.price_at_time.toFixed(2)} each
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span className="font-serif font-bold text-sm text-bb-navy shrink-0">
+                                    ₱{(item.price_at_time * item.quantity).toFixed(2)}
+                                  </span>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-xs text-bb-navy/60">Package items total: ₱{order.total_amount.toFixed(2)}</p>
+                            )}
+                          </div>
+
+                          <div className="flex justify-between items-center pt-3 border-t border-bb-navy/10 text-xs">
+                            <span className="text-bb-navy/60 font-semibold">Payment Channel: <strong className="text-bb-navy">{order.payment_method || 'GCash / PayMongo'}</strong></span>
+                            <div className="text-right">
+                              <span className="text-[11px] text-bb-navy/50 mr-2">Total Amount Paid:</span>
+                              <span className="font-serif font-bold text-lg text-bb-navy">₱{order.total_amount.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right: Recipient, Shipping & Action Hub (5 cols) */}
+                        <div className="lg:col-span-5 bg-bb-cream/40 p-5 rounded-2xl border border-bb-navy/10 space-y-4 flex flex-col justify-between">
+                          <div className="space-y-3">
+                            <h4 className="text-xs font-bold text-bb-navy uppercase tracking-wider text-bb-navy/60">
+                              Delivery Destination & Buyer
+                            </h4>
+
+                            <div className="bg-white p-3.5 rounded-xl border border-bb-navy/5 space-y-2 text-xs">
+                              <div className="flex items-center gap-2 font-bold text-bb-navy">
+                                <User size={14} className="text-bb-teal" />
+                                <span>{order.shipping_name || 'Customer'}</span>
+                              </div>
+                              {order.shipping_phone && (
+                                <div className="flex items-center gap-2 text-bb-navy/80">
+                                  <Phone size={13} className="text-bb-navy/40" />
+                                  <span className="font-mono">{order.shipping_phone}</span>
+                                </div>
                               )}
-                              <div className="min-w-0">
-                                <p className="font-bold text-xs text-bb-navy truncate">{item.product_title}</p>
-                                <p className="text-[11px] text-bb-navy/60">
-                                  Qty: <span className="font-bold text-bb-navy">{item.quantity}</span> • ₱{item.price_at_time.toFixed(2)} each
-                                </p>
+                              <div className="flex items-start gap-2 text-bb-navy/80 pt-1 border-t border-bb-navy/5">
+                                <MapPin size={13} className="text-bb-navy/40 shrink-0 mt-0.5" />
+                                <p className="leading-relaxed">{order.shipping_address || 'Address provided at checkout'}</p>
                               </div>
                             </div>
-                            <span className="font-serif font-bold text-xs text-bb-navy shrink-0">
-                              ₱{(item.price_at_time * item.quantity).toFixed(2)}
-                            </span>
+
+                            {/* Tracking / Courier Info (if available) */}
+                            {order.courier && (
+                              <div className="bg-purple-50 p-3 rounded-xl border border-purple-100 text-xs text-purple-900 space-y-1">
+                                <div className="flex justify-between">
+                                  <span className="text-purple-700 font-semibold">Courier:</span>
+                                  <span className="font-bold">{order.courier}</span>
+                                </div>
+                                {order.tracking_number && (
+                                  <div className="flex justify-between">
+                                    <span className="text-purple-700 font-semibold">Tracking #:</span>
+                                    <span className="font-mono font-bold">{order.tracking_number}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {order.seller_notes && (
+                              <div className="text-[11px] bg-teal-50/70 border border-teal-200/50 p-2.5 rounded-xl text-teal-900 italic">
+                                Note to customer: "{order.seller_notes}"
+                              </div>
+                            )}
                           </div>
-                        ))
-                      ) : (
-                        <p className="text-xs text-bb-navy/60">Package items total: ₱{order.total_amount.toFixed(2)}</p>
-                      )}
-                    </div>
 
-                    <div className="flex justify-between items-center pt-3 border-t border-bb-navy/10 text-xs">
-                      <span className="text-bb-navy/60 font-semibold">Payment Channel: <strong className="text-bb-navy">{order.payment_method || 'GCash / PayMongo'}</strong></span>
-                      <div className="text-right">
-                        <span className="text-[11px] text-bb-navy/50 mr-2">Total Amount Paid:</span>
-                        <span className="font-serif font-bold text-lg text-bb-navy">₱{order.total_amount.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  </div>
+                          {/* Action Hub Controls for B&B */}
+                          <div className="pt-3 border-t border-bb-navy/10 space-y-2">
+                            {order.status === 'paid' && (
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleMarkPreparing(order.id, e)}
+                                  disabled={processingOrderId === order.id}
+                                  className="bg-indigo-50 text-indigo-700 border border-indigo-200 py-2.5 px-3 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                                >
+                                  <Sparkles size={13} /> Mark Preparing
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDispatchModalOrder(order);
+                                  }}
+                                  className="bg-bb-teal text-white py-2.5 px-3 rounded-xl text-xs font-bold hover:bg-teal-700 transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                                >
+                                  <Truck size={13} /> Dispatch / Ship
+                                </button>
+                              </div>
+                            )}
 
-                  {/* Right: Recipient, Shipping & Action Hub (5 cols) */}
-                  <div className="lg:col-span-5 bg-bb-cream/40 p-5 rounded-2xl border border-bb-navy/10 space-y-4 flex flex-col justify-between">
-                    <div className="space-y-2.5">
-                      <h4 className="text-xs font-bold text-bb-navy uppercase tracking-wider text-bb-navy/60">
-                        Delivery Destination & Buyer
-                      </h4>
+                            {order.status === 'preparing' && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDispatchModalOrder(order);
+                                }}
+                                className="w-full bg-bb-teal text-white py-3 px-4 rounded-xl text-xs font-bold hover:bg-teal-700 transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                              >
+                                <Truck size={15} /> Dispatch & Assign Courier Tracking
+                              </button>
+                            )}
 
-                      <div className="bg-white p-3.5 rounded-xl border border-bb-navy/5 space-y-2 text-xs">
-                        <div className="flex items-center gap-2 font-bold text-bb-navy">
-                          <User size={14} className="text-bb-teal" />
-                          <span>{order.shipping_name || 'Customer'}</span>
-                        </div>
-                        {order.shipping_phone && (
-                          <div className="flex items-center gap-2 text-bb-navy/80">
-                            <Phone size={13} className="text-bb-navy/40" />
-                            <span className="font-mono">{order.shipping_phone}</span>
-                          </div>
-                        )}
-                        <div className="flex items-start gap-2 text-bb-navy/80 pt-1 border-t border-bb-navy/5">
-                          <MapPin size={13} className="text-bb-navy/40 shrink-0 mt-0.5" />
-                          <p className="leading-relaxed">{order.shipping_address || 'Address provided at checkout'}</p>
-                        </div>
-                      </div>
+                            {order.status === 'shipped' && (
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDispatchModalOrder(order);
+                                  }}
+                                  className="border border-purple-300 text-purple-800 bg-purple-50 py-2.5 px-3 rounded-xl text-xs font-semibold hover:bg-purple-100 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                                >
+                                  <Edit3 size={13} /> Edit Tracking
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleMarkCompleted(order.id, e)}
+                                  disabled={processingOrderId === order.id}
+                                  className="bg-emerald-600 text-white py-2.5 px-3 rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-1 shadow-xs cursor-pointer"
+                                >
+                                  <CheckCircle2 size={13} /> Mark Delivered
+                                </button>
+                              </div>
+                            )}
 
-                      {/* Tracking / Courier Info (if available) */}
-                      {order.courier && (
-                        <div className="bg-purple-50 p-3 rounded-xl border border-purple-100 text-xs text-purple-900 space-y-1">
-                          <div className="flex justify-between">
-                            <span className="text-purple-700 font-semibold">Courier:</span>
-                            <span className="font-bold">{order.courier}</span>
-                          </div>
-                          {order.tracking_number && (
-                            <div className="flex justify-between">
-                              <span className="text-purple-700 font-semibold">Tracking #:</span>
-                              <span className="font-mono font-bold">{order.tracking_number}</span>
+                            {isPending && (
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleMarkPaid(order.id, e)}
+                                  disabled={processingOrderId === order.id}
+                                  className="flex-1 bg-amber-600 text-white py-2.5 px-3 rounded-xl text-xs font-bold hover:bg-amber-700 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                                >
+                                  <Receipt size={13} /> Confirm Payment
+                                </button>
+                              </div>
+                            )}
+
+                            {isCompleted && (
+                              <div className="bg-emerald-50 text-emerald-800 border border-emerald-200/80 p-2.5 rounded-xl text-center text-xs font-bold flex items-center justify-center gap-1.5">
+                                <CheckCircle2 size={14} /> Order Fulfilled & Delivered
+                              </div>
+                            )}
+
+                            <div className="text-center pt-1">
+                              <button
+                                type="button"
+                                onClick={() => toggleOrder(order.id)}
+                                className="text-[11px] text-bb-navy/50 hover:text-bb-navy font-semibold flex items-center justify-center gap-1 mx-auto py-1 cursor-pointer"
+                              >
+                                <ChevronUp size={13} /> Collapse Order Details
+                              </button>
                             </div>
-                          )}
+                          </div>
                         </div>
-                      )}
-                    </div>
-
-                    {/* Action Hub Controls for B&B */}
-                    <div className="pt-3 border-t border-bb-navy/10 space-y-2">
-                      {order.status === 'paid' && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            onClick={() => handleMarkPreparing(order.id)}
-                            disabled={processingOrderId === order.id}
-                            className="bg-indigo-50 text-indigo-700 border border-indigo-200 py-2.5 px-3 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors flex items-center justify-center gap-1.5"
-                          >
-                            <Sparkles size={13} /> Mark Preparing
-                          </button>
-                          <button
-                            onClick={() => setDispatchModalOrder(order)}
-                            className="bg-bb-teal text-white py-2.5 px-3 rounded-xl text-xs font-bold hover:bg-teal-700 transition-colors flex items-center justify-center gap-1.5 shadow-sm"
-                          >
-                            <Truck size={13} /> Dispatch / Ship
-                          </button>
-                        </div>
-                      )}
-
-                      {order.status === 'preparing' && (
-                        <button
-                          onClick={() => setDispatchModalOrder(order)}
-                          className="w-full bg-bb-teal text-white py-3 px-4 rounded-xl text-xs font-bold hover:bg-teal-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
-                        >
-                          <Truck size={15} /> Dispatch & Assign Courier Tracking
-                        </button>
-                      )}
-
-                      {order.status === 'shipped' && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            onClick={() => setDispatchModalOrder(order)}
-                            className="border border-purple-300 text-purple-800 bg-purple-50 py-2.5 px-3 rounded-xl text-xs font-semibold hover:bg-purple-100 transition-colors flex items-center justify-center gap-1"
-                          >
-                            <Edit3 size={13} /> Edit Tracking
-                          </button>
-                          <button
-                            onClick={() => handleMarkCompleted(order.id)}
-                            disabled={processingOrderId === order.id}
-                            className="bg-emerald-600 text-white py-2.5 px-3 rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-1 shadow-sm"
-                          >
-                            <CheckCircle2 size={13} /> Mark Delivered
-                          </button>
-                        </div>
-                      )}
-
-                      {isPending && (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleMarkPaid(order.id)}
-                            disabled={processingOrderId === order.id}
-                            className="flex-1 bg-amber-600 text-white py-2.5 px-3 rounded-xl text-xs font-bold hover:bg-amber-700 transition-colors flex items-center justify-center gap-1"
-                          >
-                            <Receipt size={13} /> Confirm Payment
-                          </button>
-                        </div>
-                      )}
-
-                      {isCompleted && (
-                        <div className="bg-emerald-50 text-emerald-800 border border-emerald-200/80 p-2 rounded-xl text-center text-xs font-bold flex items-center justify-center gap-1.5">
-                          <CheckCircle2 size={14} /> Order Fulfilled & Delivered
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             );
           })}

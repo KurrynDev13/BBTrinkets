@@ -37,7 +37,7 @@ export default function ReviewModal({ order, isOpen, onClose, onReviewSubmitted 
 
           await supabase.from('reviews').insert({
             product_id: isValidUuid ? item.product_id : null,
-            order_id: order.id.length > 20 ? order.id : null,
+            order_id: order.id,
             user_id: userId,
             rating,
             comment: comment.trim()
@@ -45,37 +45,11 @@ export default function ReviewModal({ order, isOpen, onClose, onReviewSubmitted 
         }
       } else {
         await supabase.from('reviews').insert({
-          order_id: order.id.length > 20 ? order.id : null,
+          order_id: order.id,
           user_id: userId,
           rating,
           comment: comment.trim()
         });
-      }
-
-      // Also mark locally in localStorage for backup
-      try {
-        const reviewedOrders = JSON.parse(localStorage.getItem('bb_reviewed_orders') || '[]');
-        if (!reviewedOrders.includes(order.id)) {
-          reviewedOrders.push(order.id);
-          localStorage.setItem('bb_reviewed_orders', JSON.stringify(reviewedOrders));
-        }
-
-        // Add to local reviews list so store reflects it immediately
-        const localReviews = JSON.parse(localStorage.getItem('bb_local_reviews') || '[]');
-        localReviews.unshift({
-          id: `rev-${Date.now()}`,
-          order_id: order.id,
-          user_id: userId,
-          rating,
-          comment: comment.trim(),
-          created_at: new Date().toISOString(),
-          profiles: {
-            full_name: order.shipping_name || session?.user?.user_metadata?.full_name || 'Verified Collector'
-          }
-        });
-        localStorage.setItem('bb_local_reviews', JSON.stringify(localReviews));
-      } catch (e) {
-        console.warn('Local review storage error', e);
       }
 
       setSuccess(true);
@@ -84,16 +58,10 @@ export default function ReviewModal({ order, isOpen, onClose, onReviewSubmitted 
         onClose();
         setSuccess(false);
         setComment('');
-      }, 1500);
+      }, 1200);
     } catch (err: any) {
       console.error('Error submitting review:', err);
-      // Still show success fallback for graceful UX
-      setSuccess(true);
-      setTimeout(() => {
-        onReviewSubmitted(order.id);
-        onClose();
-        setSuccess(false);
-      }, 1500);
+      alert('Error submitting review: ' + (err.message || 'Please try again'));
     } finally {
       setSubmitting(false);
     }

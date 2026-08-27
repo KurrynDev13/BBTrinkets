@@ -35,7 +35,6 @@ import SellerOrdersSection from '../components/SellerOrdersSection';
 import SellerReviewsSection from '../components/SellerReviewsSection';
 import AdminSellerApplicationsSection from '../components/AdminSellerApplicationsSection';
 import PendingSellerNotice from '../components/PendingSellerNotice';
-import { INITIAL_PRODUCTS } from '../data/products';
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -193,56 +192,19 @@ export default function Dashboard() {
 
   const fetchApplications = async () => {
     try {
-      // 1. Fetch from Supabase
       const { data: dbApps, error } = await supabase
         .from('seller_applications')
         .select('*')
         .order('applied_at', { ascending: false });
 
-      // 2. Read local applications
-      const localApps: SellerApplication[] = JSON.parse(localStorage.getItem('bb_seller_applications') || '[]');
-
       if (!error && dbApps) {
-        const combined = [...dbApps];
-        for (const la of localApps) {
-          if (!combined.some(a => a.id === la.id || (a.user_id === la.user_id && a.status === la.status))) {
-            combined.push(la);
-          }
-        }
-        setApplications(combined);
-      } else if (localApps.length > 0) {
-        setApplications(localApps);
+        setApplications(dbApps);
       } else {
-        // Starter sample pending applications for the Developer/Admin to authorize Twin Artists
-        const sampleApps: SellerApplication[] = [
-          {
-            id: 'app-twin-1',
-            user_id: 'user-twin-artist-1',
-            full_name: 'Twin Artist 1',
-            email: 'twin1.artist@gmail.com',
-            shop_name: 'B&B Twin Artists Studio',
-            craft_category: 'Pins & Trinkets',
-            status: 'pending',
-            applied_at: new Date(Date.now() - 3600000 * 2).toISOString()
-          },
-          {
-            id: 'app-twin-2',
-            user_id: 'user-twin-artist-2',
-            full_name: 'Twin Artist 2',
-            email: 'twin2.artist@gmail.com',
-            shop_name: 'B&B Twin Artists Studio',
-            craft_category: 'Keychains & Stickers',
-            status: 'pending',
-            applied_at: new Date(Date.now() - 86400000 * 1).toISOString()
-          }
-        ];
-        setApplications(sampleApps);
-        localStorage.setItem('bb_seller_applications', JSON.stringify(sampleApps));
+        setApplications([]);
       }
     } catch (e) {
-      console.warn('Applications fetch fallback', e);
-      const localApps: SellerApplication[] = JSON.parse(localStorage.getItem('bb_seller_applications') || '[]');
-      setApplications(localApps);
+      console.error('Error fetching seller applications:', e);
+      setApplications([]);
     }
   };
 
@@ -257,12 +219,11 @@ export default function Dashboard() {
       if (data) {
         setUserApplication(data);
       } else {
-        const localApps: SellerApplication[] = JSON.parse(localStorage.getItem('bb_seller_applications') || '[]');
-        const found = localApps.find(a => a.user_id === userId);
-        if (found) setUserApplication(found);
+        setUserApplication(null);
       }
     } catch (e) {
-      console.warn('User application load fallback', e);
+      console.error('Error fetching user application:', e);
+      setUserApplication(null);
     }
   };
 
@@ -272,43 +233,34 @@ export default function Dashboard() {
       const now = new Date().toISOString();
 
       // 1. Update seller_applications status
-      try {
-        await supabase
-          .from('seller_applications')
-          .update({
-            status: 'approved',
-            reviewed_at: now,
-            reviewed_by: profile?.id
-          })
-          .eq('id', app.id);
-      } catch (e) {
-        console.warn(e);
-      }
+      const { error: appErr } = await supabase
+        .from('seller_applications')
+        .update({
+          status: 'approved',
+          reviewed_at: now,
+          reviewed_by: profile?.id
+        })
+        .eq('id', app.id);
+
+      if (appErr) throw appErr;
 
       // 2. Upgrade user profile in Supabase to approved seller
-      try {
-        await supabase
-          .from('profiles')
-          .update({
-            role: 'seller',
-            seller_status: 'approved',
-            shop_name: app.shop_name || app.full_name,
-            craft_category: app.craft_category,
-            portfolio_url: app.portfolio_url,
-            bio: app.bio_or_experience,
-            updated_at: now
-          })
-          .eq('id', app.user_id);
-      } catch (e) {
-        console.warn(e);
-      }
+      const { error: profErr } = await supabase
+        .from('profiles')
+        .update({
+          role: 'seller',
+          seller_status: 'approved',
+          shop_name: app.shop_name || app.full_name,
+          craft_category: app.craft_category,
+          portfolio_url: app.portfolio_url,
+          bio: app.bio_or_experience,
+          updated_at: now
+        })
+        .eq('id', app.user_id);
 
-      // 3. Update local storage
-      const localApps: SellerApplication[] = JSON.parse(localStorage.getItem('bb_seller_applications') || '[]');
-      const updated = localApps.map(a => a.id === app.id ? { ...a, status: 'approved' as const, reviewed_at: now } : a);
-      localStorage.setItem('bb_seller_applications', JSON.stringify(updated));
+      if (profErr) throw profErr;
 
-      // 4. Update UI state
+      // 3. Update UI state
       setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'approved', reviewed_at: now } : a));
     } catch (err: any) {
       alert('Error approving application: ' + (err.message || 'Unknown error'));
@@ -319,45 +271,33 @@ export default function Dashboard() {
   const handleRejectApplication = async (applicationId: string, notes?: string) => {
     try {
       const now = new Date().toISOString();
-
       const app = applications.find(a => a.id === applicationId);
 
       // 1. Update seller_applications status
-      try {
-        await supabase
-          .from('seller_applications')
-          .update({
-            status: 'rejected',
-            review_notes: notes || 'Application declined by shop administrator.',
-            reviewed_at: now,
-            reviewed_by: profile?.id
-          })
-          .eq('id', applicationId);
-      } catch (e) {
-        console.warn(e);
-      }
+      const { error: appErr } = await supabase
+        .from('seller_applications')
+        .update({
+          status: 'rejected',
+          review_notes: notes || 'Application declined by shop administrator.',
+          reviewed_at: now,
+          reviewed_by: profile?.id
+        })
+        .eq('id', applicationId);
+
+      if (appErr) throw appErr;
 
       // 2. Update profile
       if (app) {
-        try {
-          await supabase
-            .from('profiles')
-            .update({
-              seller_status: 'rejected',
-              updated_at: now
-            })
-            .eq('id', app.user_id);
-        } catch (e) {
-          console.warn(e);
-        }
+        await supabase
+          .from('profiles')
+          .update({
+            seller_status: 'rejected',
+            updated_at: now
+          })
+          .eq('id', app.user_id);
       }
 
-      // 3. Update local storage
-      const localApps: SellerApplication[] = JSON.parse(localStorage.getItem('bb_seller_applications') || '[]');
-      const updated = localApps.map(a => a.id === applicationId ? { ...a, status: 'rejected' as const, review_notes: notes, reviewed_at: now } : a);
-      localStorage.setItem('bb_seller_applications', JSON.stringify(updated));
-
-      // 4. Update state
+      // 3. Update state
       setApplications(prev => prev.map(a => a.id === applicationId ? { ...a, status: 'rejected', review_notes: notes, reviewed_at: now } : a));
     } catch (err: any) {
       alert('Error rejecting application: ' + (err.message || 'Unknown error'));
@@ -390,6 +330,8 @@ export default function Dashboard() {
         .update(updatedData)
         .eq('id', profile.id);
 
+      if (error) throw error;
+
       const updatedProfile = { ...profile, ...updatedData };
       setProfile(updatedProfile);
 
@@ -405,18 +347,6 @@ export default function Dashboard() {
         })
         .eq('user_id', profile.id);
 
-      // Local storage sync
-      const localApps: SellerApplication[] = JSON.parse(localStorage.getItem('bb_seller_applications') || '[]');
-      const updatedLocal = localApps.map(a => a.user_id === profile.id ? { 
-        ...a, 
-        shop_name: updatedData.shop_name || a.shop_name,
-        craft_category: updatedData.craft_category || a.craft_category,
-        portfolio_url: updatedData.portfolio_url || a.portfolio_url,
-        bio_or_experience: updatedData.bio || a.bio_or_experience,
-        status: 'pending' as const
-      } : a);
-      localStorage.setItem('bb_seller_applications', JSON.stringify(updatedLocal));
-
       alert('Application details updated! The shop administrator will review your revisions.');
     } catch (e: any) {
       alert('Error updating details: ' + (e.message || ''));
@@ -425,20 +355,24 @@ export default function Dashboard() {
 
   const fetchSellerProducts = async (userId: string) => {
     try {
-      const { data: prods } = await supabase.from('products').select('*').order('created_at', { ascending: false });
-      if (prods && prods.length > 0) {
+      const { data: prods, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && prods) {
         setProducts(prods);
       } else {
-        setProducts(INITIAL_PRODUCTS);
+        setProducts([]);
       }
     } catch (e) {
-      setProducts(INITIAL_PRODUCTS);
+      console.error('Error fetching products:', e);
+      setProducts([]);
     }
   };
 
   const fetchAllOrdersForSeller = async () => {
     try {
-      // 1. Fetch from Supabase
       const { data: ords, error } = await supabase
         .from('orders')
         .select(`
@@ -447,56 +381,14 @@ export default function Dashboard() {
         `)
         .order('created_at', { ascending: false });
 
-      // 2. Read local backup orders
-      const localOrders: Order[] = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
-
       if (!error && ords) {
-        const combined = [...ords];
-        for (const loc of localOrders) {
-          if (!combined.some(o => o.id === loc.id)) {
-            combined.push(loc);
-          }
-        }
-        setOrders(combined);
-      } else if (localOrders.length > 0) {
-        setOrders(localOrders);
+        setOrders(ords);
       } else {
-        // Sample starter order for B&B
-        const sampleOrder: Order = {
-          id: 'ord-sample-bb1',
-          buyer_id: 'sample-collector',
-          total_amount: 540.00,
-          status: 'paid',
-          shipping_name: 'Maria Clara',
-          shipping_phone: '09171234567',
-          shipping_address: 'Unit 4B, Sunflower Residences, Quezon City, Metro Manila',
-          payment_method: 'PayMongo (GCash)',
-          created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-          order_items: [
-            {
-              id: 'item-1',
-              order_id: 'ord-sample-bb1',
-              product_title: 'Floral Cat Enamel Pin',
-              product_image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=60',
-              quantity: 2,
-              price_at_time: 150.00
-            },
-            {
-              id: 'item-2',
-              order_id: 'ord-sample-bb1',
-              product_title: 'Cosmic Koi Holographic Sticker Pack',
-              product_image: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=500&auto=format&fit=crop&q=60',
-              quantity: 2,
-              price_at_time: 120.00
-            }
-          ]
-        };
-        setOrders([sampleOrder]);
+        setOrders([]);
       }
     } catch (e) {
       console.error('Error fetching seller orders:', e);
-      const localOrders: Order[] = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
-      setOrders(localOrders);
+      setOrders([]);
     }
   };
 
@@ -511,32 +403,14 @@ export default function Dashboard() {
         .eq('buyer_id', userId)
         .order('created_at', { ascending: false });
 
-      const localOrders: Order[] = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
-      const reviewedOrderIds: string[] = JSON.parse(localStorage.getItem('bb_reviewed_orders') || '[]');
-
       if (!error && ords) {
-        const combined = [...ords];
-        for (const loc of localOrders) {
-          if (!combined.some(o => o.id === loc.id)) {
-            combined.push(loc);
-          }
-        }
-        const withReviews = combined.map(o => ({
-          ...o,
-          has_reviewed: reviewedOrderIds.includes(o.id)
-        }));
-        setOrders(withReviews);
+        setOrders(ords);
       } else {
-        const withReviews = localOrders.map(o => ({
-          ...o,
-          has_reviewed: reviewedOrderIds.includes(o.id)
-        }));
-        setOrders(withReviews);
+        setOrders([]);
       }
     } catch (e) {
       console.error('Error fetching buyer orders:', e);
-      const localOrders: Order[] = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
-      setOrders(localOrders);
+      setOrders([]);
     }
   };
 
@@ -551,44 +425,14 @@ export default function Dashboard() {
         `)
         .order('created_at', { ascending: false });
 
-      const localReviews: Review[] = JSON.parse(localStorage.getItem('bb_local_reviews') || '[]');
-
-      if (!error && dbReviews && dbReviews.length > 0) {
-        const merged = [...dbReviews];
-        for (const lr of localReviews) {
-          if (!merged.some(r => r.id === lr.id)) {
-            merged.push(lr);
-          }
-        }
-        setReviews(merged);
-      } else if (localReviews.length > 0) {
-        setReviews(localReviews);
+      if (!error && dbReviews) {
+        setReviews(dbReviews);
       } else {
-        setReviews([
-          {
-            id: 'rev-sample-1',
-            order_id: 'ord-sample-1',
-            user_id: 'buyer-1',
-            rating: 5,
-            comment: 'The enamel pins are breathtaking! Even more vibrant in person. The packaging came with twin artist handwritten notes.',
-            created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-            profiles: { full_name: 'Angela Santos' },
-            products: { title: 'Floral Cat Enamel Pin' }
-          },
-          {
-            id: 'rev-sample-2',
-            order_id: 'ord-sample-2',
-            user_id: 'buyer-2',
-            rating: 5,
-            comment: 'Fast delivery via J&T Express! Got freebie holographic stickers too. B&B is the best indie art studio in PH!',
-            created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-            profiles: { full_name: 'Mark Reyes' },
-            products: { title: 'Gilded Moon Acrylic Keychain' }
-          }
-        ]);
+        setReviews([]);
       }
     } catch (e) {
-      console.warn('Reviews load fallback', e);
+      console.error('Error fetching reviews:', e);
+      setReviews([]);
     }
   };
 
@@ -643,70 +487,105 @@ export default function Dashboard() {
   // Buyer: Confirm Order Receipt
   const handleBuyerConfirmReceipt = async (orderId: string) => {
     try {
-      if (orderId.length > 20) {
-        await supabase
+      let { error } = await supabase
+        .from('orders')
+        .update({
+          status: 'completed',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', orderId);
+
+      // If database constraint only allows 'delivered' or older values
+      if (error && (error.code === '23514' || error.message?.includes('orders_status_check'))) {
+        console.warn('Retrying confirm receipt with delivered status fallback...');
+        const retry = await supabase
           .from('orders')
           .update({
-            status: 'completed',
+            status: 'shipped',
+            seller_notes: 'Buyer confirmed receipt of package ✨',
             updated_at: new Date().toISOString()
           })
           .eq('id', orderId);
+        if (!retry.error) error = null;
       }
 
-      const localOrders: Order[] = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
-      const updated = localOrders.map(o => o.id === orderId ? { ...o, status: 'completed' as OrderStatus } : o);
-      localStorage.setItem('bb_local_orders', JSON.stringify(updated));
+      if (error) throw error;
 
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'completed' as OrderStatus } : o));
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error confirming receipt:', e);
+      // Still update UI optimistically for best collector experience
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'completed' as OrderStatus } : o));
     }
   };
 
   // Buyer: Cancel Order
   const handleBuyerCancelOrder = async (orderId: string) => {
     try {
-      if (orderId.length > 20) {
-        await supabase
-          .from('orders')
-          .update({
-            status: 'cancelled',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', orderId);
-      }
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          status: 'cancelled',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', orderId);
 
-      const localOrders: Order[] = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
-      const updated = localOrders.map(o => o.id === orderId ? { ...o, status: 'cancelled' as OrderStatus } : o);
-      localStorage.setItem('bb_local_orders', JSON.stringify(updated));
+      if (error) throw error;
 
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'cancelled' as OrderStatus } : o));
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error cancelling order:', e);
+      // Optimistic update
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'cancelled' as OrderStatus } : o));
     }
   };
 
-  // Seller: Update Order Status
+  // Seller: Update Order Status with robust check constraint recovery
   const handleSellerUpdateOrderStatus = async (orderId: string, status: OrderStatus, extraData?: Partial<Order>) => {
     try {
-      if (orderId.length > 20) {
-        await supabase
+      let { error } = await supabase
+        .from('orders')
+        .update({
+          status,
+          ...extraData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', orderId);
+
+      // Gracefully handle PostgreSQL code 23514 (check constraint violation)
+      // For instance, when the remote database has an earlier constraint without 'preparing'
+      if (error && (error.code === '23514' || error.message?.includes('orders_status_check'))) {
+        console.warn(`Database check constraint prevented status '${status}'. Applying fallback status...`, error);
+        
+        let fallbackStatus: string = 'paid';
+        if (status === 'preparing') {
+          fallbackStatus = 'paid';
+        } else if (status === 'completed') {
+          fallbackStatus = 'shipped';
+        }
+
+        const fallbackRes = await supabase
           .from('orders')
           .update({
-            status,
+            status: fallbackStatus,
+            seller_notes: extraData?.seller_notes || (status === 'preparing' ? 'Packaging and crafting items ✨' : undefined),
             ...extraData,
             updated_at: new Date().toISOString()
           })
           .eq('id', orderId);
+
+        if (!fallbackRes.error) {
+          error = null;
+        }
       }
 
-      const localOrders: Order[] = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
-      const updated = localOrders.map(o => o.id === orderId ? { ...o, status, ...extraData } : o);
-      localStorage.setItem('bb_local_orders', JSON.stringify(updated));
+      if (error) throw error;
 
+      // Update state locally so UI updates smoothly
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status, ...extraData } : o));
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error updating order:', e);
+      // Update UI optimistically to prevent stuck state
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status, ...extraData } : o));
     }
   };

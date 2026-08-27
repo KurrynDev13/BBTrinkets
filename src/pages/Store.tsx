@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Product, Review, ProductCategory } from '../types';
-import { INITIAL_PRODUCTS } from '../data/products';
 import { 
   Star, 
   ShoppingCart, 
@@ -108,25 +107,21 @@ export default function Store() {
         .select('*')
         .order('created_at', { ascending: false });
         
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         setDbProducts(data);
+      } else {
+        setDbProducts([]);
       }
     } catch (err) {
-      console.warn('Supabase fetch failed, fallback to local product catalog', err);
+      console.warn('Supabase fetch failed:', err);
+      setDbProducts([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Combine initial catalog with any newly added products from db / seller dashboard
-  const allProducts = useMemo(() => {
-    const map = new Map<string, Product>();
-    // First populate initial catalog
-    INITIAL_PRODUCTS.forEach(p => map.set(p.id, p));
-    // Then overlay / add db products
-    dbProducts.forEach(p => map.set(p.id, p));
-    return Array.from(map.values());
-  }, [dbProducts]);
+  // Products are fetched directly from Supabase database & storage
+  const allProducts = dbProducts;
 
   // Categories list with counts
   const categories = useMemo(() => {
@@ -256,45 +251,38 @@ export default function Store() {
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData?.session?.user?.id || null;
 
-      const orderPayload = {
-        id: `ord-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        buyer_id: userId || 'guest-collector',
-        total_amount: checkoutModal?.totalAmount || 0,
-        status: (method.includes('Pending') ? 'pending' : 'paid') as any,
-        paymongo_checkout_id: paymongoId || null,
-        shipping_name: buyerName || sessionData?.session?.user?.user_metadata?.full_name || 'Valued Collector',
-        shipping_phone: buyerPhone || sessionData?.session?.user?.user_metadata?.gcash_number || '',
-        shipping_address: buyerAddress || 'Standard Delivery',
-        payment_method: method,
-        created_at: new Date().toISOString()
-      };
+      const shipping_name = buyerName || sessionData?.session?.user?.user_metadata?.full_name || 'Valued Collector';
+      const shipping_phone = buyerPhone || sessionData?.session?.user?.user_metadata?.gcash_number || '';
+      const shipping_address = buyerAddress || 'Standard Delivery';
+      const totalAmount = checkoutModal?.totalAmount || 0;
+      const status = method.includes('Pending') ? 'pending' : 'paid';
 
-      // 1. Try inserting to Supabase if logged in
-      if (userId && checkoutModal) {
+      // 1. Insert order to Supabase orders table
+      if (checkoutModal) {
         const { data: createdOrder, error: orderErr } = await supabase
           .from('orders')
           .insert({
             buyer_id: userId,
-            total_amount: checkoutModal.totalAmount,
-            status: method.includes('Pending') ? 'pending' : 'paid',
+            total_amount: totalAmount,
+            status,
             paymongo_checkout_id: paymongoId || null,
-            shipping_name: orderPayload.shipping_name,
-            shipping_phone: orderPayload.shipping_phone,
-            shipping_address: orderPayload.shipping_address,
+            shipping_name,
+            shipping_phone,
+            shipping_address,
             payment_method: method
           })
           .select()
           .single();
 
-        const orderIdToUse = (!orderErr && createdOrder?.id) ? createdOrder.id : orderPayload.id;
-
-        if (checkoutModal.items && checkoutModal.items.length > 0) {
+        if (orderErr) {
+          console.error('Order creation error:', orderErr);
+        } else if (createdOrder?.id && checkoutModal.items && checkoutModal.items.length > 0) {
           for (const item of checkoutModal.items) {
-            const matchedProd = dbProducts.find(p => p.title === item.title) || INITIAL_PRODUCTS.find(p => p.title === item.title);
-            const isValidUuid = matchedProd?.id && matchedProd.id.length > 20 && !matchedProd.id.startsWith('art-') && !matchedProd.id.startsWith('pin-') && !matchedProd.id.startsWith('chain-') && !matchedProd.id.startsWith('sticker-');
+            const matchedProd = dbProducts.find(p => p.title === item.title || p.id === item.product_id);
+            const isValidUuid = matchedProd?.id && matchedProd.id.length > 20;
 
             await supabase.from('order_items').insert({
-              order_id: orderIdToUse,
+              order_id: createdOrder.id,
               product_id: isValidUuid ? matchedProd.id : null,
               product_title: item.title,
               product_image: item.image_url || matchedProd?.image_url || '',
@@ -303,28 +291,6 @@ export default function Store() {
             });
           }
         }
-      }
-
-      // 2. Also keep a local backup list for instant UI syncing
-      try {
-        const existingLocal = JSON.parse(localStorage.getItem('bb_local_orders') || '[]');
-        const itemsWithPics = checkoutModal?.items.map(item => {
-          const matched = dbProducts.find(p => p.title === item.title) || INITIAL_PRODUCTS.find(p => p.title === item.title);
-          return {
-            ...item,
-            product_title: item.title,
-            product_image: item.image_url || matched?.image_url || '',
-            price_at_time: item.price
-          };
-        }) || [];
-
-        existingLocal.unshift({
-          ...orderPayload,
-          order_items: itemsWithPics
-        });
-        localStorage.setItem('bb_local_orders', JSON.stringify(existingLocal));
-      } catch (e) {
-        console.error('Local backup failed', e);
       }
     } catch (err) {
       console.error('Error logging order to Supabase:', err);
@@ -560,27 +526,46 @@ export default function Store() {
     setTimeout(() => setCopiedGcash(false), 2500);
   };
 
-  const handleSubmitReview = (e: FormEvent) => {
+  const handleSubmitReview = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedProduct || !reviewComment.trim()) return;
 
     setSubmittingReview(true);
-    const newRev: Review = {
-      id: `local-rev-${Date.now()}`,
-      product_id: selectedProduct.id,
-      user_id: 'current-user',
-      rating: reviewRating,
-      comment: reviewComment.trim(),
-      created_at: new Date().toISOString(),
-      profiles: { full_name: reviewName.trim() || 'Happy Collector' }
-    };
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData?.session?.user?.id || null;
 
-    setReviews([newRev, ...reviews]);
-    setReviewComment('');
-    setReviewName('');
-    setSubmittingReview(false);
-    setAddedToast('Review posted successfully!');
-    setTimeout(() => setAddedToast(null), 3000);
+      const isValidUuid = selectedProduct.id && selectedProduct.id.length > 20 && !selectedProduct.id.startsWith('art-') && !selectedProduct.id.startsWith('pin-') && !selectedProduct.id.startsWith('chain-') && !selectedProduct.id.startsWith('sticker-');
+
+      if (userId) {
+        await supabase.from('reviews').insert({
+          product_id: isValidUuid ? selectedProduct.id : null,
+          user_id: userId,
+          rating: reviewRating,
+          comment: reviewComment.trim()
+        });
+      }
+
+      const newRev: Review = {
+        id: `rev-${Date.now()}`,
+        product_id: selectedProduct.id,
+        user_id: userId || 'collector',
+        rating: reviewRating,
+        comment: reviewComment.trim(),
+        created_at: new Date().toISOString(),
+        profiles: { full_name: reviewName.trim() || sessionData?.session?.user?.user_metadata?.full_name || 'Collector' }
+      };
+
+      setReviews(prev => [newRev, ...prev]);
+      setReviewComment('');
+      setReviewName('');
+      setAddedToast('Review posted successfully!');
+      setTimeout(() => setAddedToast(null), 3000);
+    } catch (err) {
+      console.error('Error posting review:', err);
+    } finally {
+      setSubmittingReview(false);
+    }
   };
 
   // Helper product specifications

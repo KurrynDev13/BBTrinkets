@@ -165,7 +165,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   buyer_id UUID REFERENCES public.profiles(id) NOT NULL,
   total_amount DECIMAL(10, 2) NOT NULL,
-  status TEXT CHECK (status IN ('pending', 'paid', 'preparing', 'shipped', 'completed', 'cancelled')) DEFAULT 'pending',
+  status TEXT CHECK (status IN ('pending', 'paid', 'preparing', 'shipped', 'completed', 'cancelled', 'delivered')) DEFAULT 'pending',
   paymongo_checkout_id TEXT,
   shipping_name TEXT,
   shipping_phone TEXT,
@@ -177,6 +177,17 @@ CREATE TABLE IF NOT EXISTS public.orders (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Ensure orders_status_check accepts all current statuses even if table was created in an earlier migration
+DO $$
+BEGIN
+  ALTER TABLE public.orders DROP CONSTRAINT IF EXISTS orders_status_check;
+  ALTER TABLE public.orders ADD CONSTRAINT orders_status_check 
+    CHECK (status IN ('pending', 'paid', 'preparing', 'shipped', 'completed', 'cancelled', 'delivered'));
+EXCEPTION
+  WHEN OTHERS THEN
+    NULL;
+END $$;
 
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Buyers can view their own orders." ON public.orders;

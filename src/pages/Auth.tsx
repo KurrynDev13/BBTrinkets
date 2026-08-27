@@ -62,60 +62,29 @@ export default function Auth() {
 
           // 1. If Twin Seller and not admin, create seller approval request
           if (role === 'seller' && !isAdmin) {
-            const newApp: SellerApplication = {
-              id: `app-${Date.now()}`,
+            await supabase.from('seller_applications').insert({
               user_id: userId,
               full_name: fullName.trim(),
               email: email.trim(),
               shop_name: 'B&B Twin Artists Studio',
               craft_category: 'Pins & Artwork',
-              status: 'pending',
-              applied_at: new Date().toISOString()
-            };
-
-            // Save to local backup list for instant synchronization
-            try {
-              const existingApps: SellerApplication[] = JSON.parse(localStorage.getItem('bb_seller_applications') || '[]');
-              if (!existingApps.some(a => a.user_id === userId || a.email === email.trim())) {
-                existingApps.unshift(newApp);
-                localStorage.setItem('bb_seller_applications', JSON.stringify(existingApps));
-              }
-            } catch (e) {
-              console.warn(e);
-            }
-
-            // Try inserting to Supabase table
-            try {
-              await supabase.from('seller_applications').insert({
-                user_id: userId,
-                full_name: fullName.trim(),
-                email: email.trim(),
-                shop_name: 'B&B Twin Artists Studio',
-                craft_category: 'Pins & Artwork',
-                status: 'pending'
-              });
-            } catch (e) {
-              console.warn('Supabase seller_applications insert fallback:', e);
-            }
+              status: 'pending'
+            });
           }
 
           // 2. Upsert profile in Supabase
-          try {
-            await supabase
-              .from('profiles')
-              .upsert({ 
-                id: userId, 
-                role, 
-                full_name: fullName.trim(), 
-                email: email.trim(),
-                gcash_number: role === 'buyer' ? gcash.trim() : null,
-                shop_name: role === 'seller' ? 'B&B Twin Artists Studio' : null,
-                is_admin: isAdmin,
-                seller_status: sellerStatus
-              });
-          } catch (e) {
-            console.warn('Profile upsert fallback:', e);
-          }
+          await supabase
+            .from('profiles')
+            .upsert({ 
+              id: userId, 
+              role, 
+              full_name: fullName.trim(), 
+              email: email.trim(),
+              gcash_number: role === 'buyer' ? gcash.trim() : null,
+              shop_name: role === 'seller' ? 'B&B Twin Artists Studio' : null,
+              is_admin: isAdmin,
+              seller_status: sellerStatus
+            });
 
           // 3. Navigate or prompt login
           if (authData.session) {
