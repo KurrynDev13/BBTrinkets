@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Palette } from 'lucide-react';
+import siteLogo from '../logo_bbtrinkets.png';
 
 export default function Footer() {
   return (
@@ -8,9 +8,13 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
           
           <div className="col-span-1 md:col-span-2">
-            <Link to="/" className="flex items-center gap-2 mb-4">
-              <Palette className="text-bb-gold" size={32} />
-              <span className="font-serif font-bold text-3xl tracking-tight text-white">
+            <Link to="/" className="flex items-center gap-3 mb-4 group">
+              <img
+                src={siteLogo}
+                alt="B&B Trinkets Logo"
+                className="w-10 h-10 object-contain rounded-full bg-white/10 p-0.5 border border-bb-gold/30 group-hover:scale-105 transition-transform"
+              />
+              <span className="font-serif font-bold text-3xl tracking-tight text-white group-hover:text-bb-gold transition-colors">
                 B&B TRINKETS
               </span>
             </Link>

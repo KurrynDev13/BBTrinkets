@@ -1,8 +1,9 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { ShieldCheck, Sparkles, Store, CreditCard, Info } from 'lucide-react';
 import type { SellerApplication } from '../types';
+import siteLogo from '../logo_bbtrinkets.png';
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -106,8 +107,15 @@ export default function Auth() {
   return (
     <div className="min-h-[80vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-bb-cream">
       <div className="max-w-xl w-full bg-white p-8 sm:p-10 rounded-3xl shadow-xl border border-bb-navy/5">
-        <div>
-          <h2 className="mt-2 text-center text-3xl font-serif font-bold text-bb-navy">
+        <div className="text-center">
+          <Link to="/" className="inline-flex items-center justify-center gap-2 mb-3 group">
+            <img
+              src={siteLogo}
+              alt="B&B Trinkets Logo"
+              className="w-16 h-16 object-contain rounded-full shadow-md border-2 border-bb-navy/10 group-hover:scale-105 transition-transform"
+            />
+          </Link>
+          <h2 className="text-center text-3xl font-serif font-bold text-bb-navy">
             {isLogin ? 'Welcome Back' : 'Create an Account'}
           </h2>
           <p className="mt-2 text-center text-sm text-bb-navy/60">
