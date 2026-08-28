@@ -67,6 +67,7 @@ export default function Dashboard() {
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newPrice, setNewPrice] = useState('');
+  const [newWeight, setNewWeight] = useState('100');
   const [newCat, setNewCat] = useState('Pins');
   const [newMaterial, setNewMaterial] = useState('');
   const [newDimensions, setNewDimensions] = useState('');
@@ -843,6 +844,7 @@ export default function Dashboard() {
         title: newTitle.trim(),
         description: newDesc.trim(),
         price: parseFloat(newPrice),
+        weight_grams: parseInt(newWeight) || 100,
         category: newCat as any,
         image_url: finalImageUrl,
         material: newMaterial.trim() || defaults.material,
@@ -863,6 +865,7 @@ export default function Dashboard() {
           title: newTitle.trim(),
           description: newDesc.trim(),
           price: parseFloat(newPrice),
+          weight_grams: parseInt(newWeight) || 100,
           category: newCat as any,
           image_url: finalImageUrl,
           material: newMaterial.trim() || getProductDefaults(newCat).material,
@@ -878,6 +881,7 @@ export default function Dashboard() {
       setNewTitle('');
       setNewDesc('');
       setNewPrice('');
+      setNewWeight('100');
       setNewMaterial('');
       setNewDimensions('');
       setNewProtection('');
@@ -1431,6 +1435,10 @@ export default function Dashboard() {
                       <div>
                         <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Price in PHP (₱) *</label>
                         <input required type="number" step="0.01" value={newPrice} onChange={e => setNewPrice(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="150.00" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Weight (grams) *</label>
+                        <input required type="number" min="1" step="1" value={newWeight} onChange={e => setNewWeight(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="100" />
                       </div>
                       
                       {/* Supabase Storage File Upload or Image URL */}

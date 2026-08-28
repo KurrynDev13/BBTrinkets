@@ -165,10 +165,19 @@ CREATE TABLE IF NOT EXISTS public.products (
   title TEXT NOT NULL,
   description TEXT,
   price DECIMAL(10, 2) NOT NULL,
+  weight_grams INTEGER DEFAULT 100,
   category TEXT CHECK (category IN ('Pins', 'Keychains', 'Artworks', 'Prints', 'Stickers')),
   image_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Note: Since we are adding weight_grams, we run ALTER TABLE to safely add it if table exists
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='products' AND column_name='weight_grams') THEN
+    ALTER TABLE public.products ADD COLUMN weight_grams INTEGER DEFAULT 100;
+  END IF;
+END $$;
 
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Products are viewable by everyone." ON public.products;

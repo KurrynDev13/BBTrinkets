@@ -37,8 +37,10 @@ interface CartItem {
 
 interface CheckoutData {
   isOpen: boolean;
-  mode: 'paymongo_ready' | 'gcash_direct';
+  mode: 'shipping_form' | 'paymongo_ready' | 'gcash_direct';
   totalAmount: number;
+  totalWeightGrams: number;
+  shippingFee: number;
   description: string;
   checkoutUrl?: string;
   linkId?: string;
@@ -241,6 +243,35 @@ export default function Store() {
     return cart.reduce((sum, item) => sum + item.quantity, 0);
   }, [cart]);
 
+  const cartTotalWeight = useMemo(() => {
+    return cart.reduce((sum, item) => sum + ((item.product.weight_grams || 100) * item.quantity), 0);
+  }, [cart]);
+
+  const calculateShipping = (address: string, weightGrams: number = 100) => {
+    if (!address || address.trim().length === 0) return { fee: 0, courier: '' };
+    const addr = address.toLowerCase();
+    
+    // Weight calculation helper: rate is calculated per 500g fraction
+    const weightTiers = Math.ceil(weightGrams / 500);
+    const multiplier = Math.max(1, weightTiers);
+    
+    // International via DHL
+    if (addr.match(/usa|america|united states|uk|united kingdom|europe|australia|canada/)) return { fee: 2500 + (multiplier - 1) * 700, courier: 'DHL Express' };
+    if (addr.match(/japan|china|hong kong|korea|taiwan/)) return { fee: 1800 + (multiplier - 1) * 400, courier: 'DHL Express' };
+    if (addr.match(/singapore|malaysia|thailand|vietnam|indonesia|international/)) return { fee: 1500 + (multiplier - 1) * 300, courier: 'DHL Express' };
+    
+    // Domestic via J&T
+    if (addr.match(/tagum|panabo|samal|davao del norte/)) return { fee: 50 + (multiplier - 1) * 20, courier: 'J&T Express' };
+    if (addr.match(/davao|mindanao|cotabato|zamboanga|agusan|surigao|bukidnon|misamis/)) return { fee: 60 + (multiplier - 1) * 20, courier: 'J&T Express' };
+    if (addr.match(/manila|ncr|luzon|quezon|makati|taguig|pasig|caloocan|marikina|pasay|muntinlupa|navotas|malabon|valenzuela|pateros|san juan|mandaluyong|benguet|baguio|bulacan|pampanga|tarlac|nueva ecija|batangas|cavite|laguna|rizal|bataan|zambales|pangasinan|la union|ilocos|cagayan|isabela|bicol|albay|sorsogon/)) return { fee: 110 + (multiplier - 1) * 30, courier: 'J&T Express' };
+    if (addr.match(/visayas|cebu|bohol|leyte|samar|panay|iloilo|capiz|aklan|antique|guimaras|negros|bacolod|dumaguete/)) return { fee: 100 + (multiplier - 1) * 30, courier: 'J&T Express' };
+    
+    // Default Domestic
+    if (addr.trim().length > 5) return { fee: 110 + (multiplier - 1) * 30, courier: 'J&T Express' }; 
+    
+    return { fee: 0, courier: '' };
+  };
+
   const finalizeOrder = async (method: string, paymongoId?: string) => {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -249,8 +280,10 @@ export default function Store() {
       const shipping_name = buyerName || sessionData?.session?.user?.user_metadata?.full_name || 'Valued Collector';
       const shipping_phone = buyerPhone || sessionData?.session?.user?.user_metadata?.gcash_number || '';
       const shipping_address = buyerAddress || 'Standard Delivery';
-      const totalAmount = checkoutModal?.totalAmount || 0;
-      const status = method.includes('Pending') ? 'pending' : 'paid';
+      const shippingFee = checkoutModal?.shippingFee || 0;
+      const totalAmount = (checkoutModal?.totalAmount || 0) + shippingFee;
+      
+      const status = method.includes('Direct GCash') || method.includes('Pending') ? 'pending' : 'paid';
 
       // 1. Insert order to Supabase orders table
       if (checkoutModal) {
@@ -363,11 +396,12 @@ export default function Store() {
     };
   }, [checkoutModal?.isOpen, checkoutModal?.mode, checkoutModal?.linkId, orderConfirmed]);
 
-  const handleBuySingle = async () => {
+  const handleBuySingle = () => {
     if (!selectedProduct) return;
-    setBuying(true);
     const totalAmount = selectedProduct.price * modalQuantity;
     const desc = `${selectedProduct.title} (Qty: ${modalQuantity})`;
+    const weightGrams = (selectedProduct.weight_grams || 100) * modalQuantity;
+
     const itemData = [{
       title: selectedProduct.title,
       quantity: modalQuantity,
@@ -376,66 +410,19 @@ export default function Store() {
       product_id: selectedProduct.id
     }];
 
-    try {
-      const response = await fetch('/api/paymongo/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: totalAmount,
-          description: desc,
-          remarks: `Category: ${selectedProduct.category}`
-        })
-      });
-      
-      let data: any = null;
-      try {
-        const text = await response.text();
-        data = text ? JSON.parse(text) : null;
-      } catch {
-        // Non-JSON returned (e.g. 404 HTML)
-      }
-
-      if (response.ok && data?.data?.attributes?.checkout_url) {
-        const checkoutUrl = data.data.attributes.checkout_url;
-        const linkId = data.data.id;
-        // Open in new tab
-        window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
-        setCheckoutModal({
-          isOpen: true,
-          mode: 'paymongo_ready',
-          totalAmount,
-          description: desc,
-          checkoutUrl,
-          linkId,
-          items: itemData
-        });
-      } else {
-        // Show Direct GCash Checkout
-        setCheckoutModal({
-          isOpen: true,
-          mode: 'gcash_direct',
-          totalAmount,
-          description: desc,
-          items: itemData
-        });
-      }
-    } catch (err) {
-      console.error('Checkout error:', err);
-      setCheckoutModal({
-        isOpen: true,
-        mode: 'gcash_direct',
-        totalAmount,
-        description: desc,
-        items: itemData
-      });
-    } finally {
-      setBuying(false);
-    }
+    setCheckoutModal({
+      isOpen: true,
+      mode: 'shipping_form',
+      totalAmount,
+      totalWeightGrams: weightGrams,
+      shippingFee: 0,
+      description: desc,
+      items: itemData
+    });
   };
 
-  const handleCartCheckout = async () => {
+  const handleCartCheckout = () => {
     if (cart.length === 0) return;
-    setBuying(true);
     const desc = `B&B Trinkets Cart Order (${cartCount} items): ` + cart.map(i => `${i.product.title} x${i.quantity}`).join(', ');
     const itemData = cart.map(i => ({
       title: i.product.title,
@@ -445,13 +432,43 @@ export default function Store() {
       product_id: i.product.id
     }));
 
+    setCheckoutModal({
+      isOpen: true,
+      mode: 'shipping_form',
+      totalAmount: cartTotal,
+      totalWeightGrams: cartTotalWeight,
+      shippingFee: 0,
+      description: desc.slice(0, 100),
+      items: itemData
+    });
+  };
+
+  const handleProceedToPayment = async (method: 'paymongo' | 'gcash') => {
+    if (!checkoutModal) return;
+    
+    const shippingInfo = calculateShipping(buyerAddress, checkoutModal.totalWeightGrams);
+    const calculatedShippingFee = shippingInfo.fee;
+    const finalTotal = checkoutModal.totalAmount + calculatedShippingFee;
+    
+    setCheckoutModal(prev => prev ? {
+      ...prev,
+      shippingFee: calculatedShippingFee,
+    } : null);
+
+    if (method === 'gcash') {
+      setCheckoutModal(prev => prev ? ({ ...prev, mode: 'gcash_direct' }) : null);
+      return;
+    }
+    
+    setBuying(true);
     try {
       const response = await fetch('/api/paymongo/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: cartTotal,
-          description: desc.slice(0, 100)
+          amount: finalTotal,
+          description: checkoutModal.description,
+          remarks: `Shipping: ₱${calculatedShippingFee} via ${shippingInfo.courier}`
         })
       });
       
@@ -467,33 +484,20 @@ export default function Store() {
         const checkoutUrl = data.data.attributes.checkout_url;
         const linkId = data.data.id;
         window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
-        setCheckoutModal({
-          isOpen: true,
+        setCheckoutModal(prev => prev ? ({
+          ...prev,
           mode: 'paymongo_ready',
-          totalAmount: cartTotal,
-          description: desc,
           checkoutUrl,
-          linkId,
-          items: itemData
-        });
+          linkId
+        }) : null);
       } else {
-        setCheckoutModal({
-          isOpen: true,
-          mode: 'gcash_direct',
-          totalAmount: cartTotal,
-          description: desc,
-          items: itemData
-        });
+        alert('Could not initialize PayMongo checkout. Please use direct GCash instead.');
+        setCheckoutModal(prev => prev ? ({ ...prev, mode: 'gcash_direct' }) : null);
       }
     } catch (err) {
-      console.error('Cart checkout error:', err);
-      setCheckoutModal({
-        isOpen: true,
-        mode: 'gcash_direct',
-        totalAmount: cartTotal,
-        description: desc,
-        items: itemData
-      });
+      console.error('Checkout error:', err);
+      alert('Could not initialize PayMongo checkout. Please use direct GCash instead.');
+      setCheckoutModal(prev => prev ? ({ ...prev, mode: 'gcash_direct' }) : null);
     } finally {
       setBuying(false);
     }
@@ -1250,6 +1254,86 @@ export default function Store() {
                   Continue Shopping
                 </button>
               </div>
+            ) : checkoutModal.mode === 'shipping_form' ? (
+              <div>
+                <h3 className="text-xl font-serif font-bold text-bb-navy mb-4">Shipping Information</h3>
+                
+                <div className="space-y-3 mb-6">
+                  <div>
+                    <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Maria Santos"
+                      value={buyerName}
+                      onChange={e => setBuyerName(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">Contact No. *</label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="09XXXXXXXXX"
+                      value={buyerPhone}
+                      onChange={e => setBuyerPhone(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">Complete Delivery Address *</label>
+                    <textarea
+                      required
+                      rows={3}
+                      placeholder="House/Unit No., Street, Barangay, City, Province, Postal Code"
+                      value={buyerAddress}
+                      onChange={e => setBuyerAddress(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white resize-none"
+                    />
+                    {buyerAddress.trim().length > 5 && checkoutModal && calculateShipping(buyerAddress, checkoutModal.totalWeightGrams).courier && (
+                      <div className="mt-2 text-xs text-emerald-600 font-medium">
+                        Estimated Shipping Fee ({calculateShipping(buyerAddress, checkoutModal.totalWeightGrams).courier}): ₱{calculateShipping(buyerAddress, checkoutModal.totalWeightGrams).fee.toFixed(2)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-bb-cream/60 p-4 rounded-2xl mb-5 space-y-2 text-sm border border-bb-navy/5">
+                  <div className="flex justify-between font-medium text-bb-navy/70">
+                    <span>Subtotal:</span>
+                    <span>₱{checkoutModal.totalAmount.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between font-medium text-bb-navy/70">
+                    <span>Shipping Fee:</span>
+                    <span>₱{checkoutModal ? calculateShipping(buyerAddress, checkoutModal.totalWeightGrams).fee.toFixed(2) : '0.00'}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-bb-navy pt-2 border-t border-bb-navy/10">
+                    <span>Total Amount:</span>
+                    <span className="font-serif text-lg text-bb-teal">
+                      ₱{checkoutModal ? (checkoutModal.totalAmount + calculateShipping(buyerAddress, checkoutModal.totalWeightGrams).fee).toFixed(2) : '0.00'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => handleProceedToPayment('paymongo')}
+                    disabled={buying || !buyerName || !buyerPhone || !buyerAddress}
+                    className="w-full bg-bb-navy text-white py-3 px-4 rounded-full font-bold text-sm hover:bg-bb-dark transition-colors flex items-center justify-center gap-2 shadow-md disabled:opacity-50"
+                  >
+                    {buying ? 'Connecting...' : 'Pay with GCash / Maya / Card (PayMongo)'}
+                  </button>
+                  
+                  <button
+                    onClick={() => handleProceedToPayment('gcash')}
+                    disabled={buying || !buyerName || !buyerPhone || !buyerAddress}
+                    className="w-full bg-blue-50 text-blue-700 border border-blue-200 py-3 px-4 rounded-full font-bold text-sm hover:bg-blue-100 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    Pay directly to Seller's GCash
+                  </button>
+                </div>
+              </div>
             ) : checkoutModal.mode === 'paymongo_ready' ? (
               <div>
                 <div className="flex items-center gap-3 mb-4">
@@ -1353,58 +1437,39 @@ export default function Store() {
 
                 {/* Order Information Form */}
                 <form onSubmit={handleConfirmDirectOrder} className="space-y-3">
+                  <div className="bg-bb-cream/60 p-4 rounded-2xl mb-5 space-y-2 text-sm border border-bb-navy/5">
+                    <div className="flex justify-between font-medium text-bb-navy/70">
+                      <span>Subtotal:</span>
+                      <span>₱{checkoutModal.totalAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between font-medium text-bb-navy/70">
+                      <span>Shipping Fee:</span>
+                      <span>₱{(checkoutModal.shippingFee || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-bb-navy pt-2 border-t border-bb-navy/10">
+                      <span>Total to Send:</span>
+                      <span className="font-serif text-lg text-bb-teal">
+                        ₱{(checkoutModal.totalAmount + (checkoutModal.shippingFee || 0)).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">Your Full Name *</label>
+                    <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">GCash Reference No. *</label>
                     <input
                       type="text"
                       required
-                      placeholder="e.g. Maria Santos"
-                      value={buyerName}
-                      onChange={e => setBuyerName(e.target.value)}
+                      placeholder="e.g. 10023456789"
+                      value={gcashRef}
+                      onChange={e => setGcashRef(e.target.value)}
                       className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white"
                     />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">Contact / GCash No. *</label>
-                      <input
-                        type="tel"
-                        required
-                        placeholder="09XXXXXXXXX"
-                        value={buyerPhone}
-                        onChange={e => setBuyerPhone(e.target.value)}
-                        className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">GCash Ref No. *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. 10023456789"
-                        value={gcashRef}
-                        onChange={e => setGcashRef(e.target.value)}
-                        className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">Shipping Address *</label>
-                    <textarea
-                      required
-                      rows={2}
-                      placeholder="House/Unit No., Street, Barangay, City, Province, Postal Code"
-                      value={buyerAddress}
-                      onChange={e => setBuyerAddress(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white resize-none"
-                    />
+                    <p className="text-[11px] text-bb-navy/60 mt-1">Please enter the exact reference number from your GCash receipt.</p>
                   </div>
 
                   <button
                     type="submit"
-                    disabled={confirmingOrder}
+                    disabled={confirmingOrder || !gcashRef}
                     className="w-full bg-bb-navy text-white py-3 rounded-full font-bold text-sm hover:bg-bb-dark transition-colors flex items-center justify-center gap-2 shadow-md disabled:opacity-50 mt-4"
                   >
                     {confirmingOrder ? 'Recording Order...' : 'Confirm GCash Payment & Place Order'}

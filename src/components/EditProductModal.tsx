@@ -20,6 +20,7 @@ export default function EditProductModal({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
+  const [weightGrams, setWeightGrams] = useState('100');
   const [category, setCategory] = useState('');
   const [imgUrl, setImgUrl] = useState('');
   const [material, setMaterial] = useState('');
@@ -38,6 +39,7 @@ export default function EditProductModal({
       setTitle(product.title || '');
       setDescription(product.description || '');
       setPrice(product.price ? product.price.toString() : '');
+      setWeightGrams(product.weight_grams ? product.weight_grams.toString() : '100');
       setCategory(product.category || 'Pins');
       setImgUrl(product.image_url || '');
       setMaterial(product.material || '');
@@ -132,6 +134,7 @@ export default function EditProductModal({
         title: title.trim(),
         description: description.trim(),
         price: parseFloat(price),
+        weight_grams: parseInt(weightGrams) || 100,
         category: category as any,
         image_url: finalImageUrl,
         material: material.trim() || defaults.material,
@@ -207,6 +210,10 @@ export default function EditProductModal({
             <div>
               <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Price in PHP (₱) *</label>
               <input required type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="150.00" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Weight (grams) *</label>
+              <input required type="number" min="1" step="1" value={weightGrams} onChange={e => setWeightGrams(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="100" />
             </div>
             
             <div className="space-y-2 md:col-span-2">
