@@ -91,8 +91,7 @@ export default function EditProductModal({
 
     if (uploadError) {
       console.warn('Storage upload error:', uploadError.message);
-      if (imagePreview) return imagePreview;
-      throw new Error(`Upload failed: ${uploadError.message}`);
+      throw new Error(`Upload failed: ${uploadError.message}. Please ensure the 'product-images' bucket exists and is public in Supabase.`);
     }
 
     const { data: { publicUrl } } = supabase.storage
@@ -114,11 +113,7 @@ export default function EditProductModal({
           finalImageUrl = await uploadImageToSupabase(imageFile);
         } catch (uploadErr: any) {
           console.error('Image upload failed:', uploadErr);
-          if (imagePreview) {
-            finalImageUrl = imagePreview;
-          } else {
-            throw uploadErr;
-          }
+          throw uploadErr;
         } finally {
           setIsUploadingImage(false);
         }
@@ -149,7 +144,7 @@ export default function EditProductModal({
           finalImageUrl = await uploadImageToSupabase(pastedFile);
         } catch (err: any) {
           console.error('Failed to process base64 image', err);
-          alert('The pasted image data is invalid or too large. Please save it to your computer and use the "Upload New Image" button instead.');
+          alert('Upload failed: ' + (err.message || 'Unknown error'));
           setIsSaving(false);
           setIsUploadingImage(false);
           return;
