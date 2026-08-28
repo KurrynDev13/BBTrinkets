@@ -3,15 +3,28 @@ import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { ArrowRight, Star, ShoppingBag, Brush, Sparkles, Heart, ShieldCheck, Palette, Package } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { User } from '@supabase/supabase-js';
 import type { Product } from '../types';
 import { fetchGlobalProducts } from '../data/products';
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     fetchFeatured();
+    
+    // Check auth status
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const fetchFeatured = async () => {
@@ -63,9 +76,15 @@ export default function Home() {
                   Browse Shop
                   <ArrowRight className="group-hover:translate-x-1 transition-transform" size={18} />
                 </Link>
-                <Link to="/auth" className="w-full sm:w-auto justify-center text-center bg-white text-bb-navy border-2 border-bb-navy px-8 py-4 rounded-full font-semibold hover:bg-bb-navy/5 transition-colors">
-                  Join the Community
-                </Link>
+                {user ? (
+                  <Link to="/dashboard" className="w-full sm:w-auto justify-center text-center bg-white text-bb-navy border-2 border-bb-navy px-8 py-4 rounded-full font-semibold hover:bg-bb-navy/5 transition-colors">
+                    Go to Dashboard
+                  </Link>
+                ) : (
+                  <Link to="/auth" className="w-full sm:w-auto justify-center text-center bg-white text-bb-navy border-2 border-bb-navy px-8 py-4 rounded-full font-semibold hover:bg-bb-navy/5 transition-colors">
+                    Join the Community
+                  </Link>
+                )}
               </div>
 
               {/* Trust Indicators */}
