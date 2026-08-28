@@ -1079,8 +1079,11 @@ export default function Dashboard() {
   // Stats calculation for Seller
   const sellerStats = useMemo(() => {
     const totalSales = orders
-      .filter(o => o.status !== 'cancelled' && o.status !== 'pending')
-      .reduce((sum, o) => sum + (o.total_amount || 0), 0);
+      .filter(o => o.status !== 'cancelled' && o.status !== 'pending' && o.status !== 'declined')
+      .reduce((sum, o) => {
+        const itemsTotal = o.order_items?.reduce((itemSum, item) => itemSum + ((item.price_at_time || 0) * (item.quantity || 1)), 0) || 0;
+        return sum + itemsTotal;
+      }, 0);
     const pendingPrep = orders.filter(o => o.status === 'paid' || o.status === 'preparing').length;
     const inTransit = orders.filter(o => o.status === 'shipped').length;
     const totalReviews = reviews.length;
