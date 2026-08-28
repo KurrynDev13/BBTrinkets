@@ -39,6 +39,8 @@ import PendingSellerNotice from '../components/PendingSellerNotice';
 import DeleteAccountModal from '../components/DeleteAccountModal';
 import DeleteProductModal from '../components/DeleteProductModal';
 import EditProductModal from '../components/EditProductModal';
+import { fetchGlobalProducts } from '../data/products';
+import { getProductDefaults } from '../lib/utils';
 
 export default function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -66,6 +68,10 @@ export default function Dashboard() {
   const [newDesc, setNewDesc] = useState('');
   const [newPrice, setNewPrice] = useState('');
   const [newCat, setNewCat] = useState('Pins');
+  const [newMaterial, setNewMaterial] = useState('');
+  const [newDimensions, setNewDimensions] = useState('');
+  const [newProtection, setNewProtection] = useState('');
+  const [newOrigin, setNewOrigin] = useState('');
   const [newImg, setNewImg] = useState('');
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -525,16 +531,8 @@ export default function Dashboard() {
 
   const fetchSellerProducts = async (userId: string) => {
     try {
-      const { data: prods, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (!error && prods) {
-        setProducts(prods);
-      } else {
-        setProducts([]);
-      }
+      const data = await fetchGlobalProducts(true); // force refresh on dashboard load to see latest
+      setProducts(data || []);
     } catch (e) {
       console.error('Error fetching products:', e);
       setProducts([]);
@@ -838,19 +836,26 @@ export default function Dashboard() {
         return;
       }
 
+      const defaults = getProductDefaults(newCat);
+      
       const newProdData = {
         seller_id: profile.id,
         title: newTitle.trim(),
         description: newDesc.trim(),
         price: parseFloat(newPrice),
         category: newCat as any,
-        image_url: finalImageUrl
+        image_url: finalImageUrl,
+        material: newMaterial.trim() || defaults.material,
+        dimensions: newDimensions.trim() || defaults.dimensions,
+        protection: newProtection.trim() || defaults.protection,
+        origin: newOrigin.trim() || defaults.origin
       };
 
       const { data, error } = await supabase.from('products').insert([newProdData]).select();
 
       if (!error && data) {
         setProducts([data[0], ...products]);
+        fetchGlobalProducts(true); // invalidates cache
       } else {
         const fallbackProd: Product = {
           id: `prod-${Date.now()}`,
@@ -860,6 +865,10 @@ export default function Dashboard() {
           price: parseFloat(newPrice),
           category: newCat as any,
           image_url: finalImageUrl,
+          material: newMaterial.trim() || getProductDefaults(newCat).material,
+          dimensions: newDimensions.trim() || getProductDefaults(newCat).dimensions,
+          protection: newProtection.trim() || getProductDefaults(newCat).protection,
+          origin: newOrigin.trim() || getProductDefaults(newCat).origin,
           created_at: new Date().toISOString()
         };
         setProducts([fallbackProd, ...products]);
@@ -869,6 +878,10 @@ export default function Dashboard() {
       setNewTitle('');
       setNewDesc('');
       setNewPrice('');
+      setNewMaterial('');
+      setNewDimensions('');
+      setNewProtection('');
+      setNewOrigin('');
       setNewImg('');
       setImageFile(null);
       setImagePreview(null);
@@ -909,6 +922,7 @@ export default function Dashboard() {
       }
       
       setProducts(prev => prev.filter(p => p.id !== product.id));
+      fetchGlobalProducts(true); // invalidates cache
       setProductToDelete(null);
     } catch (err: any) {
       alert(err.message || 'Error deleting product');
@@ -1493,8 +1507,29 @@ export default function Dashboard() {
                         )}
                       </div>
                       <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Description & Material</label>
-                        <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal h-20 resize-none" placeholder="Describe the handcrafted medium, dimensions, backing..." />
+                        <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Description</label>
+                        <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal h-20 resize-none" placeholder="Describe the handcrafted medium, story, meaning..." />
+                      </div>
+                      <div className="md:col-span-2 pt-2 border-t border-bb-navy/5">
+                        <h3 className="text-sm font-bold text-bb-navy mb-3">Specifications (Optional)</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Material</label>
+                            <input value={newMaterial} onChange={e => setNewMaterial(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="e.g. Hard Enamel & Zinc Alloy" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Dimensions</label>
+                            <input value={newDimensions} onChange={e => setNewDimensions(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="e.g. Approx. 1.5 - 2 inches" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Protection/Packaging</label>
+                            <input value={newProtection} onChange={e => setNewProtection(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="e.g. Rubber clutch backing" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Origin</label>
+                            <input value={newOrigin} onChange={e => setNewOrigin(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="e.g. Hand-drawn, Manufactured via production partner" />
+                          </div>
+                        </div>
                       </div>
                       <div className="md:col-span-2 flex justify-end gap-2 pt-2 border-t border-bb-navy/5">
                         <button type="button" onClick={() => setShowAddProduct(false)} className="px-4 py-2 rounded-xl text-xs font-semibold border border-bb-navy/15 text-bb-navy hover:bg-bb-cream">
@@ -1509,8 +1544,8 @@ export default function Dashboard() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {products.map(p => (
-                      <div key={p.id} className="bg-white p-4 rounded-2xl border border-bb-navy/10 shadow-sm flex flex-col justify-between group relative overflow-hidden">
-                        <div className="absolute top-2 right-2 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-all">
+                      <div key={p.id} className="bg-white p-4 rounded-2xl border border-bb-navy/10 shadow-sm flex flex-col justify-between relative overflow-hidden">
+                        <div className="absolute top-2 right-2 flex gap-1 z-10">
                           <button
                             onClick={() => setProductToEdit(p)}
                             className="p-2 bg-white/90 backdrop-blur-sm text-bb-teal hover:text-white hover:bg-bb-teal rounded-xl shadow-sm border border-bb-navy/5"
@@ -1596,6 +1631,7 @@ export default function Dashboard() {
           onClose={() => setProductToEdit(null)}
           onConfirmEdit={(updatedProduct) => {
             setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
+            fetchGlobalProducts(true);
           }}
         />
 

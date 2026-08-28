@@ -44,6 +44,10 @@ export type Product = {
   price: number;
   category: ProductCategory;
   image_url: string;
+  material?: string;
+  dimensions?: string;
+  protection?: string;
+  origin?: string;
   created_at: string;
 };
 

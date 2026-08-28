@@ -4,6 +4,7 @@ import { Helmet } from 'react-helmet-async';
 import { ArrowRight, Star, ShoppingBag, Brush, Sparkles, Heart, ShieldCheck, Palette, Package } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { Product } from '../types';
+import { fetchGlobalProducts } from '../data/products';
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -14,15 +15,10 @@ export default function Home() {
   }, []);
 
   const fetchFeatured = async () => {
+    setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (!error && data) {
-        setProducts(data);
-      }
+      const data = await fetchGlobalProducts();
+      setProducts(data || []);
     } catch (err) {
       console.warn('Error loading featured products:', err);
     } finally {

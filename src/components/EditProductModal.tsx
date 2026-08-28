@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type FormEvent, type ChangeEvent } from 'r
 import type { Product } from '../types';
 import { supabase } from '../lib/supabase';
 import { X, Upload, Loader2, Edit2 } from 'lucide-react';
+import { getProductDefaults } from '../lib/utils';
 
 interface EditProductModalProps {
   isOpen: boolean;
@@ -21,6 +22,10 @@ export default function EditProductModal({
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('');
   const [imgUrl, setImgUrl] = useState('');
+  const [material, setMaterial] = useState('');
+  const [dimensions, setDimensions] = useState('');
+  const [protection, setProtection] = useState('');
+  const [origin, setOrigin] = useState('');
   
   const [isSaving, setIsSaving] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -35,6 +40,10 @@ export default function EditProductModal({
       setPrice(product.price ? product.price.toString() : '');
       setCategory(product.category || 'Pins');
       setImgUrl(product.image_url || '');
+      setMaterial(product.material || '');
+      setDimensions(product.dimensions || '');
+      setProtection(product.protection || '');
+      setOrigin(product.origin || '');
       setImageFile(null);
       setImagePreview(null);
     }
@@ -117,12 +126,18 @@ export default function EditProductModal({
         return;
       }
 
+      const defaults = getProductDefaults(category);
+
       const updatedProductData = {
         title: title.trim(),
         description: description.trim(),
         price: parseFloat(price),
         category: category as any,
-        image_url: finalImageUrl
+        image_url: finalImageUrl,
+        material: material.trim() || defaults.material,
+        dimensions: dimensions.trim() || defaults.dimensions,
+        protection: protection.trim() || defaults.protection,
+        origin: origin.trim() || defaults.origin
       };
 
       const { data, error } = await supabase
@@ -253,8 +268,30 @@ export default function EditProductModal({
             </div>
             
             <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Description & Material</label>
-              <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal h-20 resize-none" placeholder="Describe the handcrafted medium, dimensions, backing..." />
+              <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Description</label>
+              <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal h-20 resize-none" placeholder="Describe the handcrafted medium, story, meaning..." />
+            </div>
+
+            <div className="md:col-span-2 pt-2 border-t border-bb-navy/5">
+              <h3 className="text-sm font-bold text-bb-navy mb-3">Specifications (Optional)</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Material</label>
+                  <input value={material} onChange={e => setMaterial(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="e.g. Hard Enamel & Zinc Alloy" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Dimensions</label>
+                  <input value={dimensions} onChange={e => setDimensions(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="e.g. Approx. 1.5 - 2 inches" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Protection/Packaging</label>
+                  <input value={protection} onChange={e => setProtection(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="e.g. Rubber clutch backing" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Origin</label>
+                  <input value={origin} onChange={e => setOrigin(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="e.g. Hand-drawn, Manufactured via production partner" />
+                </div>
+              </div>
             </div>
           </div>
 

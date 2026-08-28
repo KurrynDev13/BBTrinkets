@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { supabase } from '../lib/supabase';
 import type { Product, Review, ProductCategory } from '../types';
+import { fetchGlobalProducts } from '../data/products';
+import { getProductDefaults } from '../lib/utils';
 import { 
   Star, 
   ShoppingCart, 
@@ -103,18 +105,10 @@ export default function Store() {
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
-        
-      if (!error && data) {
-        setDbProducts(data);
-      } else {
-        setDbProducts([]);
-      }
+      const data = await fetchGlobalProducts();
+      setDbProducts(data || []);
     } catch (err) {
-      console.warn('Supabase fetch failed:', err);
+      console.warn('Global fetch failed:', err);
       setDbProducts([]);
     } finally {
       setLoading(false);
@@ -569,41 +563,7 @@ export default function Store() {
     }
   };
 
-  // Helper product specifications
-  const getProductSpecs = (cat: ProductCategory) => {
-    switch (cat) {
-      case 'Pins':
-        return {
-          material: 'Hard Enamel / Gold Metal Plating',
-          size: '1.25" – 1.5" diameter',
-          backing: 'Double black rubber clutch',
-          finish: 'Polished scratch-resistant gloss'
-        };
-      case 'Keychains':
-        return {
-          material: 'Double-sided Clear Acrylic & Epoxy Sparkle',
-          size: '2.5" charm height',
-          clasp: 'Custom gold star / swivel lobster clasp',
-          finish: 'Waterproof protective layer'
-        };
-      case 'Stickers':
-        return {
-          material: 'Premium Die-Cut Vinyl',
-          size: '2.5" – 3" wide',
-          durability: '100% Waterproof & UV-proof',
-          finish: 'Matte / Holographic Luster'
-        };
-      case 'Artworks':
-      case 'Prints':
-      default:
-        return {
-          material: '300gsm Heavy textured fine-art cardstock',
-          size: 'A5 (5.8 x 8.3 in) & A4 (8.3 x 11.7 in) options',
-          printing: 'Archival pigment inks (fade-resistant for 50+ years)',
-          packaging: 'Rigid backing board with protective sleeve'
-        };
-    }
-  };
+  // Helper product specifications removed
 
   return (
     <>
@@ -1081,17 +1041,17 @@ export default function Store() {
 
                 {/* Specs Box */}
                 {(() => {
-                  const specs = getProductSpecs(selectedProduct.category);
+                  const defaults = getProductDefaults(selectedProduct.category);
                   return (
                     <div className="bg-bb-cream/60 rounded-2xl p-4 mb-6 border border-bb-navy/5 text-xs space-y-1.5">
                       <div className="font-bold text-bb-navy mb-2 flex items-center gap-1.5">
                         <Layers size={14} className="text-bb-teal" /> Product Specifications
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-bb-navy/80">
-                        <div><span className="font-semibold text-bb-navy">Material:</span> {specs.material}</div>
-                        <div><span className="font-semibold text-bb-navy">Dimensions:</span> {specs.size}</div>
-                        <div><span className="font-semibold text-bb-navy">Protection:</span> High Durability</div>
-                        <div><span className="font-semibold text-bb-navy">Origin:</span> Independent Artist</div>
+                        <div><span className="font-semibold text-bb-navy">Material:</span> {selectedProduct.material || defaults.material}</div>
+                        <div><span className="font-semibold text-bb-navy">Dimensions:</span> {selectedProduct.dimensions || defaults.dimensions}</div>
+                        <div><span className="font-semibold text-bb-navy">Protection:</span> {selectedProduct.protection || defaults.protection}</div>
+                        <div><span className="font-semibold text-bb-navy">Origin:</span> {selectedProduct.origin || defaults.origin}</div>
                       </div>
                     </div>
                   );
