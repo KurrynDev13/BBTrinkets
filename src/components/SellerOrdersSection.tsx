@@ -508,6 +508,7 @@ export default function SellerOrdersSection({
                         order.status === 'paid' ? 'bg-teal-100 text-teal-800' :
                         order.status === 'shipped' ? 'bg-purple-100 text-purple-800' :
                         order.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
+                        order.status === 'declined' || order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
                         'bg-amber-100 text-amber-800'
                       }`}>
                         <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
@@ -629,6 +630,11 @@ export default function SellerOrdersSection({
                             {order.seller_notes && (
                               <div className="text-[11px] bg-teal-50/70 border border-teal-200/50 p-2.5 rounded-xl text-teal-900 italic">
                                 Note to customer: "{order.seller_notes}"
+                              </div>
+                            )}
+                            {order.status === 'declined' && order.decline_reason && (
+                              <div className="text-[11px] bg-red-50/70 border border-red-200/50 p-2.5 rounded-xl text-red-900 italic">
+                                Decline Reason: "{order.decline_reason}"
                               </div>
                             )}
                           </div>
