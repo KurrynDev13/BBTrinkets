@@ -6,6 +6,7 @@ export type Profile = {
   full_name: string;
   email?: string;
   gcash_number?: string; // Primarily for buyers paying for orders
+  address?: string; // Delivery address
   seller_status?: SellerStatus;
   is_admin?: boolean;
   shop_name?: string;

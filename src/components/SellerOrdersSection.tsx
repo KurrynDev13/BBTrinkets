@@ -179,7 +179,7 @@ export default function SellerOrdersSection({
       if (newTrackingStatus === 'Picked up' || newTrackingStatus === 'In Transit' || newTrackingStatus === 'Out for Delivery') {
         newOrderStatus = 'shipped';
       } else if (newTrackingStatus === 'Delivered') {
-        newOrderStatus = 'shipped'; 
+        newOrderStatus = 'completed'; 
       } else if (newTrackingStatus === 'Packed and ready to pick up' || newTrackingStatus === 'Seller to Pack') {
         newOrderStatus = 'preparing';
       }
@@ -189,7 +189,7 @@ export default function SellerOrdersSection({
         status: newOrderStatus
       }).eq('id', order.id);
 
-      const message = `Order update: ${newTrackingStatus}`;
+      const message = `Order #${order.id.slice(0, 8)} update: ${newTrackingStatus}`;
       await supabase.from('notifications').upsert({
         user_id: order.buyer_id,
         order_id: order.id,

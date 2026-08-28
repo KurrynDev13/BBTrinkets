@@ -119,7 +119,7 @@ export default function Navbar() {
     setNotifications(prev => prev.filter(n => n.id !== notification.id));
     
     // Navigate to dashboard where they can see orders
-    navigate('/dashboard');
+    navigate('/dashboard', { state: { scrollToOrder: notification.order_id } });
   };
 
   return (
@@ -153,7 +153,12 @@ export default function Navbar() {
                 {profile?.role === 'buyer' && (
                   <div className="relative" ref={dropdownRef}>
                     <button 
-                      onClick={() => setShowNotifications(!showNotifications)}
+                      onClick={() => {
+                        if (!showNotifications && session?.user) {
+                          fetchNotifications(session.user.id);
+                        }
+                        setShowNotifications(!showNotifications);
+                      }}
                       className="relative p-2 text-bb-navy hover:text-bb-teal transition-colors focus:outline-none"
                     >
                       <Bell size={20} />
@@ -220,7 +225,12 @@ export default function Navbar() {
             {session && profile?.role === 'buyer' && (
               <div className="relative mr-4" ref={dropdownRef}>
                 <button 
-                  onClick={() => setShowNotifications(!showNotifications)}
+                  onClick={() => {
+                    if (!showNotifications && session?.user) {
+                      fetchNotifications(session.user.id);
+                    }
+                    setShowNotifications(!showNotifications);
+                  }}
                   className="relative p-2 text-bb-navy focus:outline-none"
                 >
                   <Bell size={24} />

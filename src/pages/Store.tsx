@@ -18,6 +18,7 @@ import {
   Sparkles, 
   PackageCheck, 
   ShieldCheck, 
+  Edit2,
   Layers, 
   Maximize2,
   Copy,
@@ -80,6 +81,8 @@ export default function Store() {
   const [confirmingOrder, setConfirmingOrder] = useState(false);
   const [isCheckingPayment, setIsCheckingPayment] = useState(false);
   const [verifiedPaymentInfo, setVerifiedPaymentInfo] = useState<{ method: string; id?: string } | null>(null);
+  const [isEditingShipping, setIsEditingShipping] = useState(false);
+  const [savingShipping, setSavingShipping] = useState(false);
 
   // Cart state
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -91,6 +94,35 @@ export default function Store() {
     }
   });
   const [isCartOpen, setIsCartOpen] = useState(false);
+
+  useEffect(() => {
+    async function fetchUserShippingInfo() {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session?.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, gcash_number, address')
+          .eq('id', sessionData.session.user.id)
+          .single();
+        
+        if (profile) {
+          if (profile.full_name) setBuyerName(profile.full_name);
+          if (profile.gcash_number) setBuyerPhone(profile.gcash_number);
+          if (profile.address) {
+            setBuyerAddress(profile.address);
+            setIsEditingShipping(false);
+          } else {
+            setIsEditingShipping(true); // First checkout or no address
+          }
+        } else {
+          setIsEditingShipping(true);
+        }
+      } else {
+        setIsEditingShipping(true);
+      }
+    }
+    fetchUserShippingInfo();
+  }, []);
 
   useEffect(() => {
     try {
@@ -114,6 +146,36 @@ export default function Store() {
       setDbProducts([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const saveShippingDetails = async () => {
+    setSavingShipping(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session?.user) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            full_name: buyerName,
+            gcash_number: buyerPhone,
+            address: buyerAddress
+          })
+          .eq('id', sessionData.session.user.id);
+        
+        if (error) throw error;
+        setIsEditingShipping(false);
+        setAddedToast('Shipping details saved successfully!');
+        setTimeout(() => setAddedToast(null), 3000);
+      } else {
+        // Guest user, just proceed locally
+        setIsEditingShipping(false);
+      }
+    } catch (err) {
+      console.error('Error saving shipping details:', err);
+      alert('Could not save shipping details. Please try again.');
+    } finally {
+      setSavingShipping(false);
     }
   };
 
@@ -1256,47 +1318,85 @@ export default function Store() {
               </div>
             ) : checkoutModal.mode === 'shipping_form' ? (
               <div>
-                <h3 className="text-xl font-serif font-bold text-bb-navy mb-4">Shipping Information</h3>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-serif font-bold text-bb-navy">Shipping Information</h3>
+                  {!isEditingShipping && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingShipping(true)}
+                      className="text-xs font-semibold text-bb-teal hover:text-bb-navy flex items-center gap-1 transition-colors"
+                    >
+                      <Edit2 size={12} /> Edit Details
+                    </button>
+                  )}
+                </div>
                 
                 <div className="space-y-3 mb-6">
-                  <div>
-                    <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">Full Name *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Maria Santos"
-                      value={buyerName}
-                      onChange={e => setBuyerName(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">Contact No. *</label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="09XXXXXXXXX"
-                      value={buyerPhone}
-                      onChange={e => setBuyerPhone(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">Complete Delivery Address *</label>
-                    <textarea
-                      required
-                      rows={3}
-                      placeholder="House/Unit No., Street, Barangay, City, Province, Postal Code"
-                      value={buyerAddress}
-                      onChange={e => setBuyerAddress(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white resize-none"
-                    />
-                    {buyerAddress.trim().length > 5 && checkoutModal && calculateShipping(buyerAddress, checkoutModal.totalWeightGrams).courier && (
-                      <div className="mt-2 text-xs text-emerald-600 font-medium">
-                        Estimated Shipping Fee ({calculateShipping(buyerAddress, checkoutModal.totalWeightGrams).courier}): ₱{calculateShipping(buyerAddress, checkoutModal.totalWeightGrams).fee.toFixed(2)}
+                  {!isEditingShipping ? (
+                    <div className="bg-white border border-bb-navy/10 rounded-xl p-4 shadow-sm">
+                      <div className="mb-3">
+                        <p className="text-[10px] font-bold text-bb-navy/50 uppercase tracking-wider">Full Name</p>
+                        <p className="text-sm font-semibold text-bb-navy">{buyerName || '—'}</p>
                       </div>
-                    )}
-                  </div>
+                      <div className="mb-3">
+                        <p className="text-[10px] font-bold text-bb-navy/50 uppercase tracking-wider">Contact No.</p>
+                        <p className="text-sm font-semibold text-bb-navy">{buyerPhone || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-bb-navy/50 uppercase tracking-wider">Delivery Address</p>
+                        <p className="text-sm font-semibold text-bb-navy whitespace-pre-wrap">{buyerAddress || '—'}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">Full Name *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Maria Santos"
+                          value={buyerName}
+                          onChange={e => setBuyerName(e.target.value)}
+                          className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">Contact No. *</label>
+                        <input
+                          type="tel"
+                          required
+                          placeholder="09XXXXXXXXX"
+                          value={buyerPhone}
+                          onChange={e => setBuyerPhone(e.target.value)}
+                          className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-bb-navy uppercase tracking-wider mb-1">Complete Delivery Address *</label>
+                        <textarea
+                          required
+                          rows={3}
+                          placeholder="House/Unit No., Street, Barangay, City, Province, Postal Code"
+                          value={buyerAddress}
+                          onChange={e => setBuyerAddress(e.target.value)}
+                          className="w-full px-3.5 py-2 rounded-xl border border-bb-navy/20 text-xs focus:outline-none focus:border-bb-teal bg-white resize-none"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={saveShippingDetails}
+                        disabled={savingShipping || !buyerName.trim() || !buyerPhone.trim() || !buyerAddress.trim()}
+                        className="w-full bg-bb-teal text-white py-2.5 rounded-xl font-bold text-xs hover:bg-teal-700 transition-colors shadow-sm disabled:opacity-50 mt-2"
+                      >
+                        {savingShipping ? 'Saving...' : 'Save Details'}
+                      </button>
+                    </>
+                  )}
+                  {buyerAddress.trim().length > 5 && checkoutModal && calculateShipping(buyerAddress, checkoutModal.totalWeightGrams).courier && (
+                    <div className="mt-2 text-xs text-emerald-600 font-medium">
+                      Estimated Shipping Fee ({calculateShipping(buyerAddress, checkoutModal.totalWeightGrams).courier}): ₱{calculateShipping(buyerAddress, checkoutModal.totalWeightGrams).fee.toFixed(2)}
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-bb-cream/60 p-4 rounded-2xl mb-5 space-y-2 text-sm border border-bb-navy/5">
@@ -1319,7 +1419,7 @@ export default function Store() {
                 <div className="flex flex-col gap-3">
                   <button
                     onClick={() => handleProceedToPayment('paymongo')}
-                    disabled={buying || !buyerName || !buyerPhone || !buyerAddress}
+                    disabled={buying || !buyerName || !buyerPhone || !buyerAddress || isEditingShipping}
                     className="w-full bg-bb-navy text-white py-3 px-4 rounded-full font-bold text-sm hover:bg-bb-dark transition-colors flex items-center justify-center gap-2 shadow-md disabled:opacity-50"
                   >
                     {buying ? 'Connecting...' : 'Pay with GCash / Maya / Card (PayMongo)'}
@@ -1327,7 +1427,7 @@ export default function Store() {
                   
                   <button
                     onClick={() => handleProceedToPayment('gcash')}
-                    disabled={buying || !buyerName || !buyerPhone || !buyerAddress}
+                    disabled={buying || !buyerName || !buyerPhone || !buyerAddress || isEditingShipping}
                     className="w-full bg-blue-50 text-blue-700 border border-blue-200 py-3 px-4 rounded-full font-bold text-sm hover:bg-blue-100 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     Pay directly to Seller's GCash

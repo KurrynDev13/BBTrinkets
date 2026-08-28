@@ -28,7 +28,9 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import type { Order, OrderStatus } from '../types';
 import ReviewModal from './ReviewModal';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { useEffect } from 'react';
 
 interface BuyerOrdersSectionProps {
   orders: Order[];
@@ -62,6 +64,28 @@ export default function BuyerOrdersSection({
   });
 
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const state = location.state as { scrollToOrder?: string } | null;
+    if (state?.scrollToOrder && orders.length > 0) {
+      const orderId = state.scrollToOrder;
+      
+      // Expand the specific order
+      setExpandedIds(new Set([orderId]));
+      
+      // Clear the state so it doesn't scroll again on normal re-renders
+      navigate(location.pathname, { replace: true, state: {} });
+      
+      // Delay scrolling to allow render
+      setTimeout(() => {
+        const el = document.getElementById(`order-card-${orderId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 300);
+    }
+  }, [location.state, orders, navigate, location.pathname]);
 
   // Tab counts
   const tabCounts = useMemo(() => {
@@ -162,13 +186,69 @@ export default function BuyerOrdersSection({
     setTimeout(() => setCopiedTracking(null), 2500);
   };
 
+  const handleBuyAgain = async (order: Order, e: MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const existingCart = JSON.parse(localStorage.getItem('cart') || '[]');
+      
+      const { data: currentProducts } = await supabase
+        .from('products')
+        .select('*')
+        .in('id', order.order_items?.map(item => item.product_id).filter(Boolean) || []);
+        
+      if (!currentProducts || currentProducts.length === 0) {
+        alert('Products are no longer available.');
+        return;
+      }
+      
+      const newCart = [...existingCart];
+      order.order_items?.forEach(item => {
+        if (!item.product_id) return;
+        const currentProduct = currentProducts.find(p => p.id === item.product_id);
+        if (currentProduct) {
+          const existingItemIndex = newCart.findIndex(cartItem => cartItem.product.id === item.product_id);
+          if (existingItemIndex > -1) {
+            newCart[existingItemIndex].quantity += item.quantity;
+          } else {
+            newCart.push({
+              product: currentProduct,
+              quantity: item.quantity
+            });
+          }
+        }
+      });
+      
+      localStorage.setItem('cart', JSON.stringify(newCart));
+      window.dispatchEvent(new Event('storage'));
+      navigate('/store?cart=open');
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+    }
+  };
+
   const handleConfirmReceived = async (order: Order, e?: MouseEvent) => {
     if (e) e.stopPropagation();
     if (!confirm('Confirm that you have received all items in this order in good condition?')) return;
     setConfirmingReceiptId(order.id);
     try {
+      // Add 'Delivered' to tracking history if not already delivered
+      const history = order.tracking_history || [];
+      if (history.length === 0 || history[history.length - 1].status !== 'Delivered') {
+        const newEvent = {
+          status: 'Delivered',
+          timestamp: new Date().toISOString()
+        };
+        const updatedHistory = [...history, newEvent];
+        
+        await supabase
+          .from('orders')
+          .update({
+            tracking_history: updatedHistory
+          })
+          .eq('id', order.id);
+      }
+      
       await onConfirmReceipt(order.id);
-      // Automatically prompt review modal!
       setSelectedReviewOrder({ ...order, status: 'completed' });
     } catch (e) {
       console.error(e);
@@ -808,10 +888,7 @@ export default function BuyerOrdersSection({
 
                               <button
                                 type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate('/store');
-                                }}
+                                onClick={(e) => handleBuyAgain(order, e)}
                                 className="px-3.5 py-2 rounded-full border border-bb-navy/15 text-bb-navy text-xs font-semibold hover:bg-white transition-colors cursor-pointer"
                               >
                                 Buy Again

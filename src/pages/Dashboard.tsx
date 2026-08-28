@@ -1095,13 +1095,15 @@ export default function Dashboard() {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="flex items-center gap-4 sm:gap-5">
               <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center font-serif text-2xl font-bold shadow-inner shrink-0 ${
+                profile.role === 'buyer' ? 'bg-bb-navy text-white' :
                 profile.is_admin ? 'bg-gradient-to-br from-teal-800 to-bb-navy text-bb-gold border-2 border-teal-300/40' :
                 isApprovedSeller ? 'bg-bb-teal text-white' : 
                 isPendingSeller ? 'bg-amber-500 text-white' :
                 'bg-bb-navy text-white'
               }`}>
-                {profile.is_admin ? <Crown size={32} className="text-amber-300" /> :
-                 isApprovedSeller ? 'B&B' :
+                {profile.role === 'buyer' ? (profile.full_name?.charAt(0) || 'C') :
+                 profile.is_admin ? <Crown size={32} className="text-amber-300" /> :
+                 isApprovedSeller ? (profile.shop_name?.charAt(0) || 'S') :
                  isPendingSeller ? <Clock size={28} /> :
                  (profile.full_name?.charAt(0) || 'C')}
               </div>
@@ -1109,7 +1111,9 @@ export default function Dashboard() {
               <div>
                 <div className="flex flex-wrap items-center gap-3">
                   <h1 className="text-2xl sm:text-3xl font-serif font-bold text-bb-navy">
-                    {profile.shop_name || (profile.is_admin ? 'B&B Twin Artists Studio' : profile.full_name || 'Valued Collector')}
+                    {profile.role === 'buyer' 
+                      ? (profile.full_name ? `${profile.full_name}'s Dashboard` : 'Collector Dashboard')
+                      : (profile.shop_name || (profile.is_admin ? 'B&B Twin Artists Studio' : profile.full_name || 'My Studio'))}
                   </h1>
                   
                   {/* Badges */}
@@ -1142,7 +1146,7 @@ export default function Dashboard() {
                       <CreditCard size={13} /> Payments: <strong>PayMongo Direct Gateway</strong>
                     </span>
                   )}
-                  {profile.craft_category && (
+                  {profile.role === 'seller' && profile.craft_category && (
                     <>
                       <span>•</span>
                       <span>Studio: <strong className="text-bb-navy">{profile.craft_category}</strong></span>

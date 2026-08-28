@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   full_name TEXT,
   email TEXT,
   gcash_number TEXT,
+  address TEXT,
   seller_status TEXT CHECK (seller_status IN ('approved', 'pending', 'rejected', 'none')) NOT NULL DEFAULT 'none',
   is_admin BOOLEAN NOT NULL DEFAULT false,
   shop_name TEXT,
