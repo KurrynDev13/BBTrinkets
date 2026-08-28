@@ -846,6 +846,34 @@ export default function Dashboard() {
         return;
       }
 
+      if (!imageFile && finalImageUrl.startsWith('data:image/')) {
+        try {
+          setIsUploadingImage(true);
+          const arr = finalImageUrl.split(',');
+          const mimeMatch = arr[0].match(/:(.*?);/);
+          if (!mimeMatch) throw new Error("Invalid base64 string");
+          const mime = mimeMatch[1];
+          const bstr = atob(arr[1]);
+          let n = bstr.length;
+          const u8arr = new Uint8Array(n);
+          while (n--) {
+            u8arr[n] = bstr.charCodeAt(n);
+          }
+          const ext = mime.split('/')[1] || 'jpg';
+          const pastedFile = new File([u8arr], `pasted-image.${ext}`, { type: mime });
+          
+          finalImageUrl = await uploadImageToSupabase(pastedFile);
+        } catch (err: any) {
+          console.error('Failed to process base64 image', err);
+          alert('The pasted image data is invalid or too large. Please save it to your computer and use the "Upload New Image" button instead.');
+          setIsAddingProduct(false);
+          setIsUploadingImage(false);
+          return;
+        } finally {
+          setIsUploadingImage(false);
+        }
+      }
+
       const defaults = getProductDefaults(newCat);
       
       const newProdData = {
