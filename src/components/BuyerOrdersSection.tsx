@@ -51,6 +51,7 @@ export default function BuyerOrdersSection({
   const [selectedReviewOrder, setSelectedReviewOrder] = useState<Order | null>(null);
   const [confirmingReceiptId, setConfirmingReceiptId] = useState<string | null>(null);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+  const [showFullTrackingIds, setShowFullTrackingIds] = useState<Set<string>>(new Set());
 
   // Set of expanded order IDs. Default only the first card expanded.
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
@@ -106,6 +107,19 @@ export default function BuyerOrdersSection({
       return true;
     });
   }, [orders, activeTab, searchQuery]);
+
+  const toggleFullTracking = (orderId: string, e: MouseEvent) => {
+    e.stopPropagation();
+    setShowFullTrackingIds(prev => {
+      const next = new Set(prev);
+      if (next.has(orderId)) {
+        next.delete(orderId);
+      } else {
+        next.add(orderId);
+      }
+      return next;
+    });
+  };
 
   const toggleOrder = (orderId: string) => {
     setExpandedIds(prev => {
@@ -636,10 +650,10 @@ export default function BuyerOrdersSection({
                             Tracking History
                           </h4>
                           <div className="space-y-4">
-                            {order.tracking_history.slice().reverse().map((event, idx) => (
+                            {order.tracking_history.slice().reverse().slice(0, showFullTrackingIds.has(order.id) ? undefined : 1).map((event, idx) => (
                               <div key={idx} className="relative pl-6">
                                 <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${idx === 0 ? 'bg-bb-teal ring-4 ring-teal-50' : 'bg-bb-navy/20'}`}></span>
-                                {idx !== order.tracking_history!.length - 1 && (
+                                {(idx !== order.tracking_history!.length - 1 && (showFullTrackingIds.has(order.id) || order.tracking_history!.length === 1)) && (
                                   <span className="absolute left-0.5 top-5 w-0.5 h-full bg-bb-navy/10 -ml-[0.5px]"></span>
                                 )}
                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-4">
@@ -655,6 +669,17 @@ export default function BuyerOrdersSection({
                               </div>
                             ))}
                           </div>
+                          {order.tracking_history.length > 1 && (
+                            <div className="pt-1">
+                              <button
+                                type="button"
+                                onClick={(e) => toggleFullTracking(order.id, e)}
+                                className="text-[11px] text-bb-navy/60 hover:text-bb-navy font-semibold underline decoration-bb-navy/30 underline-offset-2 transition-colors cursor-pointer"
+                              >
+                                {showFullTrackingIds.has(order.id) ? 'Show less tracking history' : `Show all ${order.tracking_history.length} updates`}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
 

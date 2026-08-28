@@ -1607,7 +1607,7 @@ export default function Dashboard() {
           /* ---------------- BUYER EXPERIENCE (COLLECTOR) ---------------- */
           <div className="space-y-8">
             <BuyerOrdersSection
-              orders={orders}
+              orders={orders.map(o => ({ ...o, has_reviewed: reviews.some(r => r.order_id === o.id) }))}
               onRefresh={() => refreshAllData(profile)}
               onConfirmReceipt={handleBuyerConfirmReceipt}
               onCancelOrder={handleBuyerCancelOrder}
