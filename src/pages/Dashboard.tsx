@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, type FormEvent, type ChangeEvent } from 'react';
 import { supabase } from '../lib/supabase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import type { Profile, Product, Order, Review, OrderStatus, SellerApplication } from '../types';
 import { 
   Package, 
@@ -86,10 +86,18 @@ export default function Dashboard() {
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
 
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     checkUser();
   }, []);
+
+  useEffect(() => {
+    const state = location.state as { refreshTimestamp?: number } | null;
+    if (state?.refreshTimestamp && profile) {
+      refreshAllData(profile);
+    }
+  }, [location.state, profile]);
 
   const checkUser = async () => {
     try {

@@ -20,11 +20,13 @@ import {
   RefreshCw,
   Eye,
   Layers,
-  Map
+  Map,
+  XCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import type { Order, OrderStatus, TrackingStatus, TrackingEvent } from '../types';
+import DeclineOrderModal from './DeclineOrderModal';
 
 interface SellerOrdersSectionProps {
   orders: Order[];
@@ -51,6 +53,7 @@ export default function SellerOrdersSection({
   const [activeTab, setActiveTab] = useState<SellerTab>('needs-prep');
   const [searchQuery, setSearchQuery] = useState('');
   const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
+  const [orderToDecline, setOrderToDecline] = useState<Order | null>(null);
 
   // Set of expanded order IDs. Default only the first card expanded.
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
@@ -214,6 +217,30 @@ export default function SellerOrdersSection({
       await onUpdateOrderStatus(orderId, 'completed');
     } catch (e) {
       console.error(e);
+    } finally {
+      setProcessingOrderId(null);
+    }
+  };
+
+  const handleDeclineOrder = async (reason: string) => {
+    if (!orderToDecline) return;
+    const orderId = orderToDecline.id;
+    setProcessingOrderId(orderId);
+    try {
+      await onUpdateOrderStatus(orderId, 'declined', {
+        decline_reason: reason
+      });
+      // Send notification
+      const message = `Order #${orderId.slice(0, 8)} was declined. Reason: ${reason}`;
+      await supabase.from('notifications').upsert({
+        user_id: orderToDecline.buyer_id,
+        order_id: orderId,
+        message: message,
+        is_read: false
+      }, { onConflict: 'user_id,order_id' });
+    } catch (e) {
+      console.error('Error declining order:', e);
+      throw e;
     } finally {
       setProcessingOrderId(null);
     }
@@ -640,6 +667,17 @@ export default function SellerOrdersSection({
                                 >
                                   <Receipt size={13} /> Confirm Payment
                                 </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOrderToDecline(order);
+                                  }}
+                                  disabled={processingOrderId === order.id}
+                                  className="flex-1 bg-red-50 text-red-700 border border-red-200 py-2.5 px-3 rounded-xl text-xs font-bold hover:bg-red-100 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                                >
+                                  <XCircle size={13} /> Decline
+                                </button>
                               </div>
                             )}
 
@@ -668,6 +706,14 @@ export default function SellerOrdersSection({
             );
           })}
         </div>
+      )}
+
+      {orderToDecline && (
+        <DeclineOrderModal
+          order={orderToDecline}
+          onClose={() => setOrderToDecline(null)}
+          onConfirm={handleDeclineOrder}
+        />
       )}
     </div>
   );

@@ -94,7 +94,7 @@ export default function BuyerOrdersSection({
     const toReceive = orders.filter(o => o.status === 'shipped').length;
     const toReview = orders.filter(o => o.status === 'completed' && !o.has_reviewed).length;
     const completed = orders.filter(o => o.status === 'completed').length;
-    const cancelled = orders.filter(o => o.status === 'cancelled').length;
+    const cancelled = orders.filter(o => o.status === 'cancelled' || o.status === 'declined').length;
 
     return {
       all: orders.length,
@@ -116,7 +116,7 @@ export default function BuyerOrdersSection({
       if (activeTab === 'to-receive' && order.status !== 'shipped') return false;
       if (activeTab === 'to-review' && (order.status !== 'completed' || order.has_reviewed)) return false;
       if (activeTab === 'completed' && order.status !== 'completed') return false;
-      if (activeTab === 'cancelled' && order.status !== 'cancelled') return false;
+      if (activeTab === 'cancelled' && order.status !== 'cancelled' && order.status !== 'declined') return false;
 
       // Search query
       if (searchQuery.trim()) {
@@ -270,7 +270,7 @@ export default function BuyerOrdersSection({
     }
   };
 
-  const getStatusBadge = (status: OrderStatus, sellerNotes?: string) => {
+  const getStatusBadge = (status: OrderStatus, sellerNotes?: string, declineReason?: string | null) => {
     const isPrep = status === 'preparing' || (status === 'paid' && !!sellerNotes?.toLowerCase().includes('crafting'));
     if (isPrep) {
       return (
@@ -309,6 +309,12 @@ export default function BuyerOrdersSection({
         return (
           <span className="px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600 border border-gray-200 inline-flex items-center gap-1.5 shrink-0">
             <XCircle size={12} /> Cancelled
+          </span>
+        );
+      case 'declined':
+        return (
+          <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200 inline-flex items-center gap-1.5 shrink-0">
+            <XCircle size={12} className="text-red-600" /> Declined
           </span>
         );
       default:
@@ -535,7 +541,7 @@ export default function BuyerOrdersSection({
              activeTab === 'to-ship' ? 'No orders currently being prepared' :
              activeTab === 'to-receive' ? 'No packages in transit' :
              activeTab === 'to-review' ? 'No orders waiting for review' :
-             activeTab === 'cancelled' ? 'No cancelled orders' : 'No order records found'}
+             activeTab === 'cancelled' ? 'No cancelled or declined orders' : 'No order records found'}
           </h3>
           <p className="text-xs text-bb-navy/50 mb-6 max-w-xs mx-auto">
             {activeTab === 'all'
@@ -602,13 +608,13 @@ export default function BuyerOrdersSection({
                     </div>
 
                     <div className="hidden sm:block">
-                      {getStatusBadge(order.status, order.seller_notes)}
+                      {getStatusBadge(order.status, order.seller_notes, order.decline_reason)}
                     </div>
                   </div>
 
                   {/* Mobile Status Badge */}
                   <div className="sm:hidden flex items-center justify-between">
-                    {getStatusBadge(order.status, order.seller_notes)}
+                    {getStatusBadge(order.status, order.seller_notes, order.decline_reason)}
                     <span className="font-serif font-bold text-sm text-bb-navy">
                       ₱{order.total_amount.toFixed(2)}
                     </span>
@@ -670,6 +676,16 @@ export default function BuyerOrdersSection({
                       transition={{ duration: 0.22, ease: 'easeInOut' }}
                       className="overflow-hidden"
                     >
+                      {/* Decline Reason Banner */}
+                      {order.status === 'declined' && order.decline_reason && (
+                        <div className="bg-red-50/80 border-b border-red-200/60 px-5 py-3 text-xs text-red-900 flex items-start sm:items-center gap-2.5">
+                          <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5 sm:mt-0" />
+                          <div>
+                            <span className="font-bold">Order Declined: </span>
+                            <span>{order.decline_reason}</span>
+                          </div>
+                        </div>
+                      )}
                       {/* Status Progress Indicator Banner */}
                       {isToPay && (
                         <div className="bg-amber-50/80 border-b border-amber-200/60 px-5 py-3 text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">

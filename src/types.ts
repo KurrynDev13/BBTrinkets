@@ -70,7 +70,7 @@ export type Review = {
   };
 };
 
-export type OrderStatus = 'pending' | 'paid' | 'preparing' | 'shipped' | 'completed' | 'cancelled';
+export type OrderStatus = 'pending' | 'paid' | 'preparing' | 'shipped' | 'completed' | 'cancelled' | 'declined';
 
 export type OrderItem = {
   id?: string;
@@ -115,6 +115,7 @@ export type Order = {
   courier?: string;
   tracking_history?: TrackingEvent[];
   seller_notes?: string;
+  decline_reason?: string | null;
   created_at: string;
   updated_at?: string;
   order_items?: OrderItem[];

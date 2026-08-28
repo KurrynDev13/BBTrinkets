@@ -119,7 +119,7 @@ export default function Navbar() {
     setNotifications(prev => prev.filter(n => n.id !== notification.id));
     
     // Navigate to dashboard where they can see orders
-    navigate('/dashboard', { state: { scrollToOrder: notification.order_id } });
+    navigate('/dashboard', { state: { scrollToOrder: notification.order_id, refreshTimestamp: Date.now() } });
   };
 
   return (
