@@ -19,11 +19,12 @@ import {
   ChevronUp,
   RefreshCw,
   Eye,
-  Layers
+  Layers,
+  Map
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import type { Order, OrderStatus } from '../types';
-import DispatchModal from './DispatchModal';
+import { supabase } from '../lib/supabase';
+import type { Order, OrderStatus, TrackingStatus, TrackingEvent } from '../types';
 
 interface SellerOrdersSectionProps {
   orders: Order[];
@@ -33,6 +34,15 @@ interface SellerOrdersSectionProps {
 
 type SellerTab = 'all' | 'needs-prep' | 'shipped' | 'completed' | 'pending';
 
+const TRACKING_OPTIONS: TrackingStatus[] = [
+  'Seller to Pack',
+  'Packed and ready to pick up',
+  'Picked up',
+  'In Transit',
+  'Out for Delivery',
+  'Delivered'
+];
+
 export default function SellerOrdersSection({
   orders,
   onRefresh,
@@ -40,15 +50,14 @@ export default function SellerOrdersSection({
 }: SellerOrdersSectionProps) {
   const [activeTab, setActiveTab] = useState<SellerTab>('needs-prep');
   const [searchQuery, setSearchQuery] = useState('');
-  const [dispatchModalOrder, setDispatchModalOrder] = useState<Order | null>(null);
   const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
 
-  // Set of expanded order IDs. If 1 or 2 orders, default all expanded; otherwise first expanded
+  // Set of expanded order IDs. Default only the first card expanded.
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
-    if (orders.length <= 2) {
-      return new Set(orders.map(o => o.id));
+    if (orders.length > 0) {
+      return new Set([orders[0].id]);
     }
-    return new Set(orders.slice(0, 1).map(o => o.id));
+    return new Set();
   });
 
   // Tab counts
@@ -94,11 +103,23 @@ export default function SellerOrdersSection({
 
   const toggleOrder = (orderId: string) => {
     setExpandedIds(prev => {
+      const isExpanding = !prev.has(orderId);
       const next = new Set(prev);
-      if (next.has(orderId)) {
-        next.delete(orderId);
-      } else {
+      
+      if (isExpanding) {
+        // Collapse all other cards when expanding a new one
+        next.clear();
         next.add(orderId);
+        
+        // Focus screen on the newly expanded card
+        setTimeout(() => {
+          const el = document.getElementById(`order-card-${orderId}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 150);
+      } else {
+        next.delete(orderId);
       }
       return next;
     });
@@ -137,6 +158,49 @@ export default function SellerOrdersSection({
       });
     } catch (e) {
       console.error(e);
+    } finally {
+      setProcessingOrderId(null);
+    }
+  };
+
+  const handleUpdateTracking = async (order: Order, newTrackingStatus: TrackingStatus) => {
+    setProcessingOrderId(order.id);
+    try {
+      const history = order.tracking_history || [];
+      if (history.length > 0 && history[history.length - 1].status === newTrackingStatus) return;
+
+      const newEvent: TrackingEvent = {
+        status: newTrackingStatus,
+        timestamp: new Date().toISOString()
+      };
+      const updatedHistory = [...history, newEvent];
+
+      let newOrderStatus = order.status;
+      if (newTrackingStatus === 'Picked up' || newTrackingStatus === 'In Transit' || newTrackingStatus === 'Out for Delivery') {
+        newOrderStatus = 'shipped';
+      } else if (newTrackingStatus === 'Delivered') {
+        newOrderStatus = 'shipped'; 
+      } else if (newTrackingStatus === 'Packed and ready to pick up' || newTrackingStatus === 'Seller to Pack') {
+        newOrderStatus = 'preparing';
+      }
+
+      await supabase.from('orders').update({
+        tracking_history: updatedHistory,
+        status: newOrderStatus
+      }).eq('id', order.id);
+
+      const message = `Order update: ${newTrackingStatus}`;
+      await supabase.from('notifications').upsert({
+        user_id: order.buyer_id,
+        order_id: order.id,
+        message: message,
+        is_read: false
+      }, { onConflict: 'user_id,order_id' });
+
+      onRefresh();
+    } catch (e) {
+      console.error(e);
+      alert('Failed to update tracking');
     } finally {
       setProcessingOrderId(null);
     }
@@ -325,6 +389,7 @@ export default function SellerOrdersSection({
 
             return (
               <div
+                id={`order-card-${order.id}`}
                 key={order.id}
                 className={`bg-white rounded-3xl border shadow-xs transition-all duration-200 overflow-hidden hover:shadow-md ${
                   isNeedsPrep ? 'border-teal-200 ring-1 ring-teal-100' : 'border-bb-navy/10'
@@ -543,62 +608,25 @@ export default function SellerOrdersSection({
 
                           {/* Action Hub Controls for B&B */}
                           <div className="pt-3 border-t border-bb-navy/10 space-y-2">
-                            {isPaidNotPreparing && (
-                              <div className="grid grid-cols-2 gap-2">
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleMarkPreparing(order.id, e)}
+                            {(isPaidNotPreparing || isPreparing || order.status === 'shipped') && (
+                              <div className="space-y-2">
+                                <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider">
+                                  Update Tracking Status
+                                </label>
+                                <select
                                   disabled={processingOrderId === order.id}
-                                  className="bg-indigo-50 text-indigo-700 border border-indigo-200 py-2.5 px-3 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                                  value={(order.tracking_history && order.tracking_history.length > 0) ? order.tracking_history[order.tracking_history.length - 1].status : ''}
+                                  onChange={(e) => handleUpdateTracking(order, e.target.value as TrackingStatus)}
+                                  className="w-full px-3.5 py-2.5 rounded-xl border border-bb-navy/20 text-xs font-semibold focus:outline-none focus:border-bb-teal bg-white cursor-pointer"
                                 >
-                                  <Sparkles size={13} /> Mark Preparing
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setDispatchModalOrder(order);
-                                  }}
-                                  className="bg-bb-teal text-white py-2.5 px-3 rounded-xl text-xs font-bold hover:bg-teal-700 transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-                                >
-                                  <Truck size={13} /> Dispatch / Ship
-                                </button>
-                              </div>
-                            )}
-
-                            {isPreparing && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDispatchModalOrder(order);
-                                }}
-                                className="w-full bg-bb-teal text-white py-3 px-4 rounded-xl text-xs font-bold hover:bg-teal-700 transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer"
-                              >
-                                <Truck size={15} /> Dispatch & Assign Courier Tracking
-                              </button>
-                            )}
-
-                            {order.status === 'shipped' && (
-                              <div className="grid grid-cols-2 gap-2">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setDispatchModalOrder(order);
-                                  }}
-                                  className="border border-purple-300 text-purple-800 bg-purple-50 py-2.5 px-3 rounded-xl text-xs font-semibold hover:bg-purple-100 transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                                >
-                                  <Edit3 size={13} /> Edit Tracking
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleMarkCompleted(order.id, e)}
-                                  disabled={processingOrderId === order.id}
-                                  className="bg-emerald-600 text-white py-2.5 px-3 rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-1 shadow-xs cursor-pointer"
-                                >
-                                  <CheckCircle2 size={13} /> Mark Delivered
-                                </button>
+                                  <option value="" disabled>Select Status...</option>
+                                  {TRACKING_OPTIONS.map(status => (
+                                    <option key={status} value={status}>{status}</option>
+                                  ))}
+                                </select>
+                                {processingOrderId === order.id && (
+                                  <div className="text-[10px] text-bb-navy/50 animate-pulse text-center pt-1">Updating...</div>
+                                )}
                               </div>
                             )}
 
@@ -640,19 +668,6 @@ export default function SellerOrdersSection({
             );
           })}
         </div>
-      )}
-
-      {/* Dispatch Modal Trigger */}
-      {dispatchModalOrder && (
-        <DispatchModal
-          order={dispatchModalOrder}
-          isOpen={true}
-          onClose={() => setDispatchModalOrder(null)}
-          onOrderDispatched={() => {
-            onRefresh();
-            setDispatchModalOrder(null);
-          }}
-        />
       )}
     </div>
   );

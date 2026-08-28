@@ -205,6 +205,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
   payment_method TEXT,
   courier TEXT,
   tracking_number TEXT,
+  tracking_history JSONB DEFAULT '[]'::jsonb,
   seller_notes TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -219,6 +220,14 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     NULL;
+END $$;
+
+-- Add tracking_history column safely if table already exists
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='orders' AND column_name='tracking_history') THEN
+    ALTER TABLE public.orders ADD COLUMN tracking_history JSONB DEFAULT '[]'::jsonb;
+  END IF;
 END $$;
 
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
@@ -236,6 +245,35 @@ CREATE POLICY "Sellers can view all orders." ON public.orders FOR SELECT USING (
   EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'seller')
 );
 CREATE POLICY "Sellers can update order status." ON public.orders FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'seller')
+);
+
+-- 4.5 Notifications Table
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  order_id UUID REFERENCES public.orders(id) ON DELETE CASCADE NOT NULL,
+  message TEXT NOT NULL,
+  is_read BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(user_id, order_id)
+);
+
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can view their own notifications." ON public.notifications;
+DROP POLICY IF EXISTS "Sellers can insert notifications." ON public.notifications;
+DROP POLICY IF EXISTS "Sellers can update notifications." ON public.notifications;
+DROP POLICY IF EXISTS "Users can update their own notifications." ON public.notifications;
+
+CREATE POLICY "Users can view their own notifications." ON public.notifications FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Sellers can view notifications." ON public.notifications FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'seller')
+);
+CREATE POLICY "Users can update their own notifications." ON public.notifications FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Sellers can insert notifications." ON public.notifications FOR INSERT WITH CHECK (
+  EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'seller')
+);
+CREATE POLICY "Sellers can update notifications." ON public.notifications FOR UPDATE USING (
   EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'seller')
 );
 

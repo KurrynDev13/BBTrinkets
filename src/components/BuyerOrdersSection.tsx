@@ -52,12 +52,12 @@ export default function BuyerOrdersSection({
   const [confirmingReceiptId, setConfirmingReceiptId] = useState<string | null>(null);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
 
-  // Set of expanded order IDs. If 1 or 2 orders, default all expanded; otherwise default first expanded
+  // Set of expanded order IDs. Default only the first card expanded.
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
-    if (orders.length <= 2) {
-      return new Set(orders.map(o => o.id));
+    if (orders.length > 0) {
+      return new Set([orders[0].id]);
     }
-    return new Set(orders.slice(0, 1).map(o => o.id));
+    return new Set();
   });
 
   const navigate = useNavigate();
@@ -109,11 +109,23 @@ export default function BuyerOrdersSection({
 
   const toggleOrder = (orderId: string) => {
     setExpandedIds(prev => {
+      const isExpanding = !prev.has(orderId);
       const next = new Set(prev);
-      if (next.has(orderId)) {
-        next.delete(orderId);
-      } else {
+      
+      if (isExpanding) {
+        // Collapse all other cards when expanding a new one
+        next.clear();
         next.add(orderId);
+        
+        // Focus screen on the newly expanded card
+        setTimeout(() => {
+          const el = document.getElementById(`order-card-${orderId}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 150);
+      } else {
+        next.delete(orderId);
       }
       return next;
     });
@@ -456,6 +468,7 @@ export default function BuyerOrdersSection({
 
             return (
               <div 
+                id={`order-card-${order.id}`}
                 key={order.id} 
                 className={`bg-white rounded-2xl border transition-all duration-200 overflow-hidden shadow-xs hover:shadow-md ${
                   isExpanded ? 'border-bb-navy/20 ring-1 ring-bb-navy/5' : 'border-bb-navy/10'
@@ -613,6 +626,35 @@ export default function BuyerOrdersSection({
                               {copiedTracking === order.tracking_number ? 'Copied Tracking' : 'Copy Waybill'}
                             </button>
                           )}
+                        </div>
+                      )}
+
+                      {/* Tracking History Timeline */}
+                      {order.tracking_history && order.tracking_history.length > 0 && (
+                        <div className="bg-bb-cream/20 px-5 py-4 border-b border-bb-navy/5 text-xs text-bb-navy space-y-3">
+                          <h4 className="font-bold text-bb-navy/60 uppercase tracking-wider text-[11px] mb-1">
+                            Tracking History
+                          </h4>
+                          <div className="space-y-4">
+                            {order.tracking_history.slice().reverse().map((event, idx) => (
+                              <div key={idx} className="relative pl-6">
+                                <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${idx === 0 ? 'bg-bb-teal ring-4 ring-teal-50' : 'bg-bb-navy/20'}`}></span>
+                                {idx !== order.tracking_history!.length - 1 && (
+                                  <span className="absolute left-0.5 top-5 w-0.5 h-full bg-bb-navy/10 -ml-[0.5px]"></span>
+                                )}
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-4">
+                                  <span className={`font-semibold ${idx === 0 ? 'text-bb-navy' : 'text-bb-navy/70'}`}>
+                                    {event.status}
+                                  </span>
+                                  <span className="text-[10px] text-bb-navy/50 font-mono">
+                                    {new Date(event.timestamp).toLocaleString('en-US', {
+                                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                                    })}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
 

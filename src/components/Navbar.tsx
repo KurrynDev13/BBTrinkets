@@ -1,31 +1,81 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, Menu, X, User } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { ShoppingBag, Menu, X, User, Bell } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import type { Profile } from '../types';
+import type { Profile, Notification } from '../types';
 import siteLogo from '../logo_bbtrinkets.png';
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  
+  // Notifications state
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  
   const navigate = useNavigate();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session?.user) fetchProfile(session.user.id);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        fetchNotifications(session.user.id);
+      }
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session?.user) fetchProfile(session.user.id);
-      else setProfile(null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        fetchNotifications(session.user.id);
+      } else {
+        setProfile(null);
+        setNotifications([]);
+      }
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    
+    // Subscribe to realtime notifications
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${session.user.id}`,
+        },
+        () => {
+          fetchNotifications(session.user.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const fetchProfile = async (userId: string) => {
@@ -37,9 +87,39 @@ export default function Navbar() {
     if (data) setProfile(data);
   };
 
+  const fetchNotifications = async (userId: string) => {
+    const { data } = await supabase
+      .from('notifications')
+      .select('*, order:orders(id)')
+      .eq('user_id', userId)
+      .eq('is_read', false)
+      .order('created_at', { ascending: false })
+      .limit(3);
+    
+    if (data) {
+      setNotifications(data);
+    }
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/');
+  };
+  
+  const handleNotificationClick = async (notification: Notification) => {
+    setShowNotifications(false);
+    
+    // Mark as read
+    await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', notification.id);
+      
+    // Update local state to feel snappy
+    setNotifications(prev => prev.filter(n => n.id !== notification.id));
+    
+    // Navigate to dashboard where they can see orders
+    navigate('/dashboard');
   };
 
   return (
@@ -68,6 +148,53 @@ export default function Navbar() {
             
             {session ? (
               <div className="flex items-center gap-4 border-l border-bb-navy/20 pl-6">
+                
+                {/* Notification Bell */}
+                {profile?.role === 'buyer' && (
+                  <div className="relative" ref={dropdownRef}>
+                    <button 
+                      onClick={() => setShowNotifications(!showNotifications)}
+                      className="relative p-2 text-bb-navy hover:text-bb-teal transition-colors focus:outline-none"
+                    >
+                      <Bell size={20} />
+                      {notifications.length > 0 && (
+                        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-bb-cream"></span>
+                      )}
+                    </button>
+                    
+                    {/* Notifications Dropdown */}
+                    {showNotifications && (
+                      <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-lg border border-bb-navy/10 overflow-hidden z-50">
+                        <div className="px-4 py-3 border-b border-bb-navy/5 bg-bb-cream/30">
+                          <h3 className="font-semibold text-bb-navy text-sm">Recent Order Updates</h3>
+                        </div>
+                        <div className="max-h-80 overflow-y-auto">
+                          {notifications.length === 0 ? (
+                            <div className="px-4 py-6 text-center text-bb-navy/50 text-sm">
+                              No new notifications
+                            </div>
+                          ) : (
+                            notifications.map((notification) => (
+                              <button
+                                key={notification.id}
+                                onClick={() => handleNotificationClick(notification)}
+                                className="w-full text-left px-4 py-3 hover:bg-bb-cream/50 transition-colors border-b border-bb-navy/5 last:border-0"
+                              >
+                                <div className="text-sm text-bb-navy font-medium line-clamp-2">
+                                  {notification.message}
+                                </div>
+                                <div className="text-xs text-bb-navy/50 mt-1">
+                                  {new Date(notification.created_at).toLocaleDateString()}
+                                </div>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <Link to="/dashboard" className="text-bb-navy hover:text-bb-teal font-medium transition-colors flex items-center gap-2">
                   <User size={18} />
                   {(profile?.is_admin || profile?.seller_status === 'approved') ? 'Artist Studio' : 'My Account'}
@@ -90,6 +217,46 @@ export default function Navbar() {
 
           {/* Mobile menu button */}
           <div className="flex items-center md:hidden">
+            {session && profile?.role === 'buyer' && (
+              <div className="relative mr-4" ref={dropdownRef}>
+                <button 
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative p-2 text-bb-navy focus:outline-none"
+                >
+                  <Bell size={24} />
+                  {notifications.length > 0 && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-bb-cream"></span>
+                  )}
+                </button>
+                {showNotifications && (
+                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-bb-navy/10 overflow-hidden z-50">
+                    <div className="px-4 py-3 border-b border-bb-navy/5 bg-bb-cream/30">
+                      <h3 className="font-semibold text-bb-navy text-sm">Recent Updates</h3>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      {notifications.length === 0 ? (
+                        <div className="px-4 py-4 text-center text-bb-navy/50 text-sm">
+                          No new notifications
+                        </div>
+                      ) : (
+                        notifications.map((notification) => (
+                          <button
+                            key={notification.id}
+                            onClick={() => { handleNotificationClick(notification); setIsOpen(false); }}
+                            className="w-full text-left px-4 py-3 hover:bg-bb-cream/50 border-b border-bb-navy/5 last:border-0"
+                          >
+                            <div className="text-sm text-bb-navy font-medium line-clamp-2">
+                              {notification.message}
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            
             <button
               onClick={() => setIsOpen(!isOpen)}
               className="text-bb-navy hover:text-bb-teal focus:outline-none"

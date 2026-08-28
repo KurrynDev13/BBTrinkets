@@ -81,6 +81,25 @@ export type OrderItem = {
   price_at_time: number;
 };
 
+export type TrackingStatus = 'Seller to Pack' | 'Packed and ready to pick up' | 'Picked up' | 'In Transit' | 'Out for Delivery' | 'Delivered';
+
+export type TrackingEvent = {
+  status: TrackingStatus;
+  timestamp: string;
+};
+
+export type Notification = {
+  id: string;
+  user_id: string;
+  order_id: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+  order?: {
+    id: string;
+  };
+};
+
 export type Order = {
   id: string;
   buyer_id: string;
@@ -93,6 +112,7 @@ export type Order = {
   payment_method?: string;
   tracking_number?: string;
   courier?: string;
+  tracking_history?: TrackingEvent[];
   seller_notes?: string;
   created_at: string;
   updated_at?: string;
