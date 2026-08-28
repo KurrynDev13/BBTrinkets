@@ -64,7 +64,7 @@ export default function Home() {
                   <ArrowRight className="group-hover:translate-x-1 transition-transform" size={18} />
                 </Link>
                 <Link to="/auth" className="w-full sm:w-auto justify-center text-center bg-white text-bb-navy border-2 border-bb-navy px-8 py-4 rounded-full font-semibold hover:bg-bb-navy/5 transition-colors">
-                  Seller Portal
+                  Join the Community
                 </Link>
               </div>
 
