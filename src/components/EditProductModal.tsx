@@ -21,6 +21,7 @@ export default function EditProductModal({
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [weightGrams, setWeightGrams] = useState('100');
+  const [stock, setStock] = useState('0');
   const [category, setCategory] = useState('');
   const [imgUrl, setImgUrl] = useState('');
   const [material, setMaterial] = useState('');
@@ -40,6 +41,7 @@ export default function EditProductModal({
       setDescription(product.description || '');
       setPrice(product.price ? product.price.toString() : '');
       setWeightGrams(product.weight_grams ? product.weight_grams.toString() : '100');
+      setStock(product.stock !== undefined ? product.stock.toString() : '0');
       setCategory(product.category || 'Pins');
       setImgUrl(product.image_url || '');
       setMaterial(product.material || '');
@@ -134,7 +136,8 @@ export default function EditProductModal({
         title: title.trim(),
         description: description.trim(),
         price: parseFloat(price),
-        weight_grams: parseInt(weightGrams) || 100,
+        weight_grams: parseFloat(weightGrams) || 100,
+        stock: parseInt(stock) || 0,
         category: category as any,
         image_url: finalImageUrl,
         material: material.trim() || defaults.material,
@@ -213,7 +216,12 @@ export default function EditProductModal({
             </div>
             <div>
               <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Weight (grams) *</label>
-              <input required type="number" min="1" step="1" value={weightGrams} onChange={e => setWeightGrams(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="100" />
+              <input required type="number" min="0.01" step="0.01" value={weightGrams} onChange={e => setWeightGrams(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="100.00" />
+            </div>
+            
+            <div>
+              <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Stock (Inventory) *</label>
+              <input required type="number" min="0" step="1" value={stock} onChange={e => setStock(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="e.g. 50" />
             </div>
             
             <div className="space-y-2 md:col-span-2">

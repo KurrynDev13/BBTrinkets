@@ -887,13 +887,19 @@ export default function Store() {
 
                     <button
                       onClick={() => addToCart(product, 1)}
-                      className="w-full xl:w-auto justify-center bg-bb-navy text-white px-3 sm:px-4 py-2 rounded-full text-[10px] sm:text-xs font-bold hover:bg-bb-dark transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                      disabled={product.stock === undefined || product.stock <= 0}
+                      className="w-full xl:w-auto justify-center bg-bb-navy text-white px-3 sm:px-4 py-2 rounded-full text-[10px] sm:text-xs font-bold hover:bg-bb-dark transition-all flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Plus size={14} className="hidden sm:block" />
                       <span className="hidden sm:inline">Add to Bag</span>
                       <span className="sm:hidden">Add</span>
                     </button>
                   </div>
+                  {product.stock !== undefined && product.stock > 0 ? (
+                    <span className="text-[10px] font-bold text-emerald-600 mt-2 block">In stock</span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-red-500 mt-2 block">Out of stock</span>
+                  )}
                 </div>
               </div>
             );
@@ -1088,9 +1094,15 @@ export default function Store() {
                   <span className="inline-block px-3 py-1 rounded-full bg-bb-teal/10 text-bb-teal text-xs font-bold">
                     {selectedProduct.category}
                   </span>
-                  <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
-                    <PackageCheck size={14} /> In Stock & Ready to Ship
-                  </span>
+                  {selectedProduct.stock !== undefined && selectedProduct.stock > 0 ? (
+                    <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                      <PackageCheck size={14} /> In stock
+                    </span>
+                  ) : (
+                    <span className="text-xs text-red-500 font-semibold flex items-center gap-1">
+                      <PackageCheck size={14} /> Out of stock
+                    </span>
+                  )}
                 </div>
 
                 <h2 className="text-2xl sm:text-3xl font-serif font-bold text-bb-navy mb-2 leading-tight">
@@ -1136,8 +1148,9 @@ export default function Store() {
                       </button>
                       <span className="text-sm font-bold text-bb-navy min-w-[20px] text-center">{modalQuantity}</span>
                       <button
-                        onClick={() => setModalQuantity(modalQuantity + 1)}
-                        className="text-bb-navy/70 hover:text-bb-navy font-bold p-1"
+                        onClick={() => setModalQuantity(Math.min(selectedProduct.stock || 1, modalQuantity + 1))}
+                        disabled={modalQuantity >= (selectedProduct.stock || 0)}
+                        className="text-bb-navy/70 hover:text-bb-navy font-bold p-1 disabled:opacity-50"
                       >
                         <Plus size={14} />
                       </button>
@@ -1150,15 +1163,16 @@ export default function Store() {
                         addToCart(selectedProduct, modalQuantity);
                         setSelectedProduct(null);
                       }}
-                      className="w-full bg-bb-cream border-2 border-bb-navy text-bb-navy py-3 rounded-full font-bold text-sm hover:bg-bb-navy/5 transition-all flex items-center justify-center gap-2"
+                      disabled={selectedProduct.stock === undefined || selectedProduct.stock <= 0}
+                      className="w-full bg-bb-cream border-2 border-bb-navy text-bb-navy py-3 rounded-full font-bold text-sm hover:bg-bb-navy/5 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <ShoppingCart size={16} /> Add to Bag
                     </button>
                     
                     <button 
                       onClick={handleBuySingle}
-                      disabled={buying}
-                      className="w-full bg-bb-navy text-white py-3 rounded-full font-bold text-sm hover:bg-bb-dark transition-all flex items-center justify-center gap-2 disabled:opacity-70 shadow-md"
+                      disabled={buying || selectedProduct.stock === undefined || selectedProduct.stock <= 0}
+                      className="w-full bg-bb-navy text-white py-3 rounded-full font-bold text-sm hover:bg-bb-dark transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed shadow-md"
                     >
                       {buying ? 'Processing...' : `Buy Now (₱${(selectedProduct.price * modalQuantity).toFixed(2)})`}
                     </button>

@@ -44,6 +44,7 @@ export type Product = {
   description: string;
   price: number;
   weight_grams?: number;
+  stock?: number;
   category: ProductCategory;
   image_url: string;
   material?: string;

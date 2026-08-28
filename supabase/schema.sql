@@ -392,3 +392,33 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.delete_user_account() TO authenticated;
+
+-- ==============================================================================
+-- DATABASE MIGRATIONS & FIXES (August 2026)
+-- Run these statements in the Supabase SQL Editor if you are updating an existing database.
+-- ==============================================================================
+
+-- 1. Remove the restrictive CHECK constraint on the category column to allow 'Stickers'
+DO $$
+DECLARE
+  constraint_name text;
+BEGIN
+  SELECT conname INTO constraint_name
+  FROM pg_constraint
+  WHERE conrelid = 'public.products'::regclass AND contype = 'c' AND consrc ILIKE '%category%';
+  IF constraint_name IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE public.products DROP CONSTRAINT ' || constraint_name;
+  END IF;
+END $$;
+
+-- 2. Alter weight_grams to support decimals (FLOAT/DECIMAL)
+ALTER TABLE public.products ALTER COLUMN weight_grams TYPE DECIMAL(10, 2);
+
+-- 3. Add stock column for inventory management
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS stock INTEGER DEFAULT 0;
+
+-- 4. Update products RLS policy so any approved seller can edit any existing product
+DROP POLICY IF EXISTS "Sellers can update their own products." ON public.products;
+CREATE POLICY "Sellers can update any product." ON public.products FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'seller')
+);

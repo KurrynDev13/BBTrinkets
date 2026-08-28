@@ -68,6 +68,7 @@ export default function Dashboard() {
   const [newDesc, setNewDesc] = useState('');
   const [newPrice, setNewPrice] = useState('');
   const [newWeight, setNewWeight] = useState('100');
+  const [newStock, setNewStock] = useState('0');
   const [newCat, setNewCat] = useState('Pins');
   const [newMaterial, setNewMaterial] = useState('');
   const [newDimensions, setNewDimensions] = useState('');
@@ -540,7 +541,7 @@ export default function Dashboard() {
 
   const fetchSellerProducts = async (userId: string) => {
     try {
-      const data = await fetchGlobalProducts(true); // force refresh on dashboard load to see latest
+      const data = await fetchGlobalProducts(false); // load from cache, no force refresh
       setProducts(data || []);
     } catch (e) {
       console.error('Error fetching products:', e);
@@ -852,7 +853,8 @@ export default function Dashboard() {
         title: newTitle.trim(),
         description: newDesc.trim(),
         price: parseFloat(newPrice),
-        weight_grams: parseInt(newWeight) || 100,
+        weight_grams: parseFloat(newWeight) || 100,
+        stock: parseInt(newStock) || 0,
         category: newCat as any,
         image_url: finalImageUrl,
         material: newMaterial.trim() || defaults.material,
@@ -873,7 +875,8 @@ export default function Dashboard() {
           title: newTitle.trim(),
           description: newDesc.trim(),
           price: parseFloat(newPrice),
-          weight_grams: parseInt(newWeight) || 100,
+          weight_grams: parseFloat(newWeight) || 100,
+          stock: parseInt(newStock) || 0,
           category: newCat as any,
           image_url: finalImageUrl,
           material: newMaterial.trim() || getProductDefaults(newCat).material,
@@ -890,6 +893,7 @@ export default function Dashboard() {
       setNewDesc('');
       setNewPrice('');
       setNewWeight('100');
+      setNewStock('0');
       setNewMaterial('');
       setNewDimensions('');
       setNewProtection('');
@@ -1450,7 +1454,11 @@ export default function Dashboard() {
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Weight (grams) *</label>
-                        <input required type="number" min="1" step="1" value={newWeight} onChange={e => setNewWeight(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="100" />
+                        <input required type="number" min="0.01" step="0.01" value={newWeight} onChange={e => setNewWeight(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="100.00" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-bb-navy uppercase tracking-wider mb-1">Stock (Inventory) *</label>
+                        <input required type="number" min="0" step="1" value={newStock} onChange={e => setNewStock(e.target.value)} className="w-full p-2.5 rounded-xl border border-bb-navy/20 text-xs focus:border-bb-teal" placeholder="e.g. 50" />
                       </div>
                       
                       {/* Supabase Storage File Upload or Image URL */}
